@@ -137,17 +137,21 @@ function searchResCtrl($scope, $rootScope, $http, $location) {
   $rootScope.pageSizes = [20, 50, 75, 100];
   $rootScope.vm.invenioPageSize = 20;
   $rootScope.handlePageSizeChange = function handlePageSizeChange() {
-      $rootScope.vm.invenioSearchArgs.size = $rootScope.vm.invenioPageSize;
-      $rootScope.vm.invenioSearchArgs.page = 1;
-      let search = new URLSearchParams(window.location.search);
-      search.set('size', $rootScope.vm.invenioSearchArgs.size);
-      search.set('page', 1);
+    $rootScope.vm.invenioSearchArgs.size = $rootScope.vm.invenioPageSize;
+    $rootScope.vm.invenioSearchArgs.page = 1;
+    let search = new URLSearchParams(window.location.search);
+    search.set('size', $rootScope.vm.invenioSearchArgs.size);
+    search.set('page', 1);
+    if(window.invenioSearchFunctions) {
       window.history.pushState(null,document.title,window.location.pathname + '?' + search);
       if($rootScope.vm.invenioSearchHiddenParams.size) {
         $rootScope.vm.invenioSearchHiddenParams.size = $rootScope.vm.invenioSearchArgs.size;
       }else {
         $rootScope.vm.invenioSearchCurrentArgs.params.size = $rootScope.vm.invenioSearchArgs.size;
       }
+    }else{
+      window.location.href = "/search?" + search;
+    }
   }
   function onCurrentPageSizeChange(newValue, oldValue) {
     if(newValue) $rootScope.vm.invenioPageSize = parseInt(newValue);
@@ -181,6 +185,12 @@ function searchResCtrl($scope, $rootScope, $http, $location) {
             size: data.dlt_dis_num_selected,
             sort: descOrEsc + key_sort
           };
+
+          // fetch_select
+          if(response.enable_fetch_select === 1) {
+            window.invenioSearchFunctions = {};
+            window.invenioSearchFunctions.reSearchInvenio = $scope.reSearchInvenio;
+          }
 
           // If initial display setting is root index
           if (data.init_disp_setting.init_disp_index === "0") {
@@ -407,8 +417,6 @@ function searchResCtrl($scope, $rootScope, $http, $location) {
       $rootScope.vm.invenioSearchHiddenParams = [];
     })
   }
-  window.invenioSearchFunctions = {};
-  window.invenioSearchFunctions.reSearchInvenio = $scope.reSearchInvenio;
 }
 
 // Item export controller

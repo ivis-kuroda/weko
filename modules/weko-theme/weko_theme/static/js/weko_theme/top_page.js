@@ -198,10 +198,7 @@ require([
 
                 if(window.invenioSearchFunctions) {
                     window.invenioSearchFunctions.reSearchInvenio(searchParam);
-<<<<<<< HEAD
-=======
                     $('#search-form').off('submit');
->>>>>>> ee18dd837 (202309 JDCAT Requirements)
                 }else{
                     window.location.href = "/search?" + searchParam;
                 }
