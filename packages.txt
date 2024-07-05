@@ -16,7 +16,7 @@ cachelib==0.1
 cchardet==2.1.1
 celery==4.4.4
 certifi==2017.11.5
-cffi==1.11.2
+# cffi==1.11.2
 chardet==3.0.4
 citeproc-py==0.5.1
 citeproc-py-styles==0.1.2
@@ -58,7 +58,7 @@ Flask-WTF==0.14.3
 flask-sitemap==0.4.0
 Flask-IIIF==0.6.1
 Flask-DebugToolbar==0.13.1
-fs==0.5.4
+# fs==0.5.4
 future==0.16.0
 html5lib==1.0.1
 idna==2.6
@@ -72,7 +72,7 @@ jedi==0.11.0
 Jinja2==2.10.1
 jinja2-cli==0.6.0
 jinja2-time==0.2.0
-jsmin==2.2.2
+# jsmin==2.2.2
 jsonpatch==1.21
 jsonpointer==1.14
 jsonref==0.1
@@ -107,7 +107,7 @@ pickleshare==0.7.4
 pluggy==0.13.1
 poyo==0.4.1
 prompt-toolkit==1.0.15
-psycopg2==2.7.3.2
+# psycopg2==2.7.3.2
 ptyprocess==0.5.2
 pycparser==2.18
 Pygments==2.2.0
