@@ -20,7 +20,7 @@ from os.path import dirname, exists
 
 from . import config
 from .ext import WekoLoggingBase
-
+from .st import WekoLoggingST
 
 class WekoLoggingFS(WekoLoggingBase):
     """WEKO-Logging extension. Filesystem handler."""
@@ -34,8 +34,13 @@ class WekoLoggingFS(WekoLoggingBase):
         self.init_config(app)
         if app.config["WEKO_LOGGING_FS_LOGFILE"] is None:
             return
+
+        app.logger.error("WEKO_LOGGING_FS: before")
+
         self.install_handler(app)
         app.extensions["weko-logging-fs"] = self
+
+        app.logger.error("WEKO_LOGGING_FS: after")
 
     def init_config(self, app):
         """
@@ -79,7 +84,8 @@ class WekoLoggingFS(WekoLoggingBase):
         """
         basedir = dirname(app.config["WEKO_LOGGING_FS_LOGFILE"])
         if not exists(basedir):
-            raise ValueError("Log directory {0} does not exist.".format(basedir))
+            raise ValueError(
+                "Log directory {0} does not exist.".format(basedir))
 
         # # Check if directory exists.
         # filepath = app.config['WEKO_LOGGING_FS_LOGFILE']
@@ -118,3 +124,5 @@ class WekoLoggingFS(WekoLoggingBase):
         #     app.logger.addHandler(default_handler)
         if app.config["WEKO_LOGGING_FS_PYWARNINGS"]:
             self.capture_pywarnings(handler)
+
+        WekoLoggingST(app)

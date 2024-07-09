@@ -49,6 +49,8 @@ for further details):
       SENTRY_TRANSPORT = 'raven.transport.http.HTTPTransport'
 """
 
+import logging
+
 # ----------
 # FILESYSTEM
 # ----------
@@ -78,3 +80,17 @@ WEKO_LOGGING_FS_LEVEL = "ERROR"
 Set to a valid Python logging level: ``CRITICAL``, ``ERROR``, ``WARNING``,
 ``INFO``, ``DEBUG``, or ``NOTSET``.
 """
+
+WEKO_LOGGING_ST_MESSAGE_DICTIONARY = {
+    '0000': "Hello World",
+    '0001': "WEKO_LOGGING_FS had called",
+    '0002': "WEKO_LOGGING_ST had called",
+    '0003': 'Custom Logger had set up',
+}
+
+WEKO_LOGGING_ST_FORMATS = {
+    logging.DEBUG: "[%(asctime)s][%(levelname)s/%(name)s]  - %(message)s",
+    logging.INFO: "[%(asctime)s][%(levelname)s/%(name)s] - %(message)s",
+    logging.WARN: "[%(asctime)s][%(levelname)s/%(name)s]  - %(message)s [in %(pathname)s:%(lineno)d]",
+    logging.ERROR: "[%(asctime)s][%(levelname)s/%(name)s] - %(message)s [in %(pathname)s:%(lineno)d]"
+}
