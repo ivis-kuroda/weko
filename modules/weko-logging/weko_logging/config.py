@@ -86,6 +86,7 @@ WEKO_LOGGING_ST_MESSAGE_DICTIONARY = {
     '0001': "WEKO_LOGGING_FS had called",
     '0002': "WEKO_LOGGING_ST had called",
     '0003': 'Custom Logger had set up',
+    '0004': 'Custom Handler had set up',
 }
 
 WEKO_LOGGING_ST_FORMATS = {

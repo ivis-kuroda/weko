@@ -31,16 +31,15 @@ class WekoLoggingFS(WekoLoggingBase):
 
         :param app: The flask application.
         """
+        # app.logger.error(app.config['WEKO_LOGGING_ST_MESSAGE_DICTIONARY']['0001'])
+        WekoLoggingST(app)
+
         self.init_config(app)
         if app.config["WEKO_LOGGING_FS_LOGFILE"] is None:
             return
 
-        app.logger.error("WEKO_LOGGING_FS: before")
-
         self.install_handler(app)
         app.extensions["weko-logging-fs"] = self
-
-        app.logger.error("WEKO_LOGGING_FS: after")
 
     def init_config(self, app):
         """
@@ -115,7 +114,7 @@ class WekoLoggingFS(WekoLoggingBase):
         )
         handler.setLevel(app.config["WEKO_LOGGING_FS_LEVEL"])
         # Add handler to application logger
-        app.logger.addHandler(handler)
+        # app.logger.addHandler(handler)
         # default_handler.setLevel(app.config['WEKO_LOGGING_FS_LEVEL'])
         # formatter2 = logging.Formatter(
         #         '[%(asctime)s] - %(levelname)s - %(filename)s - %(name)s - %(funcName)s - %(message)s '
@@ -125,4 +124,4 @@ class WekoLoggingFS(WekoLoggingBase):
         if app.config["WEKO_LOGGING_FS_PYWARNINGS"]:
             self.capture_pywarnings(handler)
 
-        WekoLoggingST(app)
+

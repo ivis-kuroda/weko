@@ -41,6 +41,7 @@
         "./modules/weko-sitemap",
         "./modules/invenio-iiif",
         "./modules/weko-redis",
-        "./modules/weko-swordserver"
+        "./modules/weko-swordserver",
+        "./modules/invenio-indexer"
     ]
 }
