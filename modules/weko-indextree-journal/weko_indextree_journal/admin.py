@@ -35,7 +35,7 @@ from weko_records.api import ItemTypes
 
 from .api import Journals
 from .permissions import indextree_journal_permission
-
+from weko_logging.utils import print_user_id, print_user
 
 class IndexJournalSettingView(BaseView):
     """Index journal setting view."""
@@ -45,6 +45,10 @@ class IndexJournalSettingView(BaseView):
     @expose('/<int:index_id>', methods=['GET'])
     def index(self, index_id=0):
         """Render a basic view."""
+
+        print_user_id()
+        print_user()
+
         lists = ItemTypes.get_latest()
         if lists is None or len(lists) == 0:
             return self.render(
