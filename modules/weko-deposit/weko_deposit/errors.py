@@ -26,4 +26,7 @@ class WekoDepositRegistrarionError(WekoDepositError):
     def __init__(self, ex=None, msg=None):
         super().__init__(ex, msg)
 
+class WekoDepositStorageError(WekoDepositError):
+    def __init__(self, ex=None, msg=None):
+        super().__init__(ex, msg)
 
