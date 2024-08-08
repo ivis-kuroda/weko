@@ -25,8 +25,10 @@ import os
 
 import cchardet as chardet
 from flask import current_app
-from invenio_files_rest.storage.base import StorageError
 from invenio_files_rest.storage.pyfs import PyFSFileStorage
+
+from .lggr import weko_logger
+from .errors import WekoDepositError, WekoDepositStorageError
 
 
 class WekoFileStorage(PyFSFileStorage):
@@ -47,8 +49,9 @@ class WekoFileStorage(PyFSFileStorage):
 
         try:
             fp = self.open(mode='rb')
-        except Exception as e:
-            raise StorageError('Could not send file: {}'.format(e))
+        except Exception as ex:
+            weko_logger(ex=ex)
+            raise WekoDepositStorageError(ex=ex, msg='Could not send file') from ex
 
         mime = fjson.get('mimetype', '')
         if 'text' in mime:
@@ -57,8 +60,9 @@ class WekoFileStorage(PyFSFileStorage):
             if ecd and 'UTF-8' not in ecd:
                 try:
                     s = s.decode(ecd).encode('utf-8')
-                except BaseException:
-                    pass
+                except UnicodeError as ex:
+                    weko_logger(ex=ex)
+                    raise WekoDepositError(ex=ex, msg='Could not encoding/decoding file') from ex
             strb = base64.b64encode(s).decode("utf-8")
         else:
             strb = base64.b64encode(fp.read()).decode("utf-8")
