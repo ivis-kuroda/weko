@@ -32,13 +32,45 @@ class WekoLoggingBase(object):
         :param app: The flask application.
         """
         if app:
-            self.init_app(app)
+            WekoLoggingBase.init_app(self, app)
 
     def init_app(self, app):
         """Initialize app.
 
         :param app: The flask application.
         """
+        WekoLoggingBase.install_handler(self, app)
+
+    def install_handler(self, app):
+        """Install handler.
+
+        :param app: The flask application.
+        """
+        app.logger.setLevel(logging.INFO)
+        logging.IMPORTANT = 25
+        logging.addLevelName(logging.IMPORTANT, "IMPORTANT")
+        setattr(app.logger, 'important', lambda msg, *args, **kwargs: app.logger._log(logging.IMPORTANT, msg, args, **kwargs))
+
+        format = '[%(asctime)s,%(msecs)03d][%(levelname)s] weko - (id %(user_id)s, ip %(ip_address)s) - %(message)s [file %(pathname)s line %(lineno)d in %(funcName)s]'
+        datefmt = '%Y-%m-%d %H:%M:%S'
+
+        formatter = logging.Formatter(fmt=format, datefmt=datefmt)
+        if app.logger.handlers:
+            for handler in app.logger.handlers:
+                handler.setLevel(logging.INFO)
+                handler.setFormatter(formatter)
+        else:
+            handler = logging.StreamHandler()
+            handler.setLevel(logging.INFO)
+            handler.setFormatter(formatter)
+            app.logger.addHandler(handler)
+
+        app.logger.addFilter(WekoLoggingFilter())
+
+        app.logger.info('!!!!!!!!!!!!!!!!!!!!WEKO-Logging initialized!!!!!!!!!!!!!!!!!')
+        app.logger.error(f'WEKO-Logging has {len(app.logger.handlers)} handlers.')
+        app.logger.important(f'app.logger {type(app.logger)} handlers.')
+
 
     @staticmethod
     def capture_pywarnings(handler):
@@ -54,3 +86,19 @@ class WekoLoggingBase(object):
                 return
         logger.addHandler(handler)
         logger.setLevel(logging.WARNING)
+
+
+class WekoLoggingFilter(logging.Filter):
+    def filter(self, record):
+        from flask_login import current_user
+        from weko_accounts.utils import get_remote_addr
+
+        try:
+            record.user_id = current_user.id
+        except AttributeError:
+            record.user_id = None
+        finally:
+            record.ip_address = get_remote_addr()
+
+        return True
+

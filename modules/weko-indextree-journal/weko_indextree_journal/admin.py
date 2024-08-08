@@ -32,6 +32,7 @@ from flask_babelex import gettext as _
 from flask_login import login_required
 from invenio_i18n.ext import current_i18n
 from weko_records.api import ItemTypes
+from weko_logging.lggr import weko_logger
 
 from .api import Journals
 from .permissions import indextree_journal_permission
@@ -45,6 +46,9 @@ class IndexJournalSettingView(BaseView):
     @expose('/<int:index_id>', methods=['GET'])
     def index(self, index_id=0):
         """Render a basic view."""
+
+        weko_logger("IndexJournalSettingView.index")
+
         lists = ItemTypes.get_latest()
         if lists is None or len(lists) == 0:
             return self.render(
