@@ -21,7 +21,7 @@
 """Extensions for weko-logging."""
 
 import logging
-
+from .lggr import weko_logger
 
 class WekoLoggingBase(object):
     """WEKO-Logging extension for console."""
@@ -67,9 +67,9 @@ class WekoLoggingBase(object):
 
         app.logger.addFilter(WekoLoggingFilter())
 
-        app.logger.info('!!!!!!!!!!!!!!!!!!!!WEKO-Logging initialized!!!!!!!!!!!!!!!!!')
         app.logger.error(f'WEKO-Logging has {len(app.logger.handlers)} handlers.')
-        app.logger.important(f'app.logger {type(app.logger)} handlers.')
+        # weko_logger('!!!!!!!!!!!!!!!!!!!!WEKO-Logging initialized!!!!!!!!!!!!!!!!!')
+        # app.logger.important(f'app.logger {type(app.logger)} handlers.')
 
 
     @staticmethod

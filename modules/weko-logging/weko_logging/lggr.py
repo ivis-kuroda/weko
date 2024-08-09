@@ -1,3 +1,4 @@
+import inspect
 from flask import current_app
 
 import logging
@@ -17,7 +18,7 @@ class CustomLogFilter(logging.Filter):
 
 
 def weko_logger(msg):
-    format = '[%(asctime)s,%(msecs)03d][%(levelname)s] weko - (id %(user_id)s, ip %(ip_address)s) - %(message)s [file %(pathname)s line %(lineno)d in %(funcName)s]'
+    format = '[%(asctime)s,%(msecs)03d][%(levelname)s] weko - (id %(user_id)s, ip %(ip_address)s) - %(message)s [file %(wpathname)s line %(wlineno)d in %(wfuncName)s]'
     # format = '[%(asctime)s,%(msecs)03d][%(levelname)s] weko - %(message)s [file %(pathname)s line %(lineno)d in %(funcName)s]'
     datefmt = '%Y-%m-%d %H:%M:%S'
 
@@ -25,6 +26,14 @@ def weko_logger(msg):
     for handler in current_app.logger.handlers:
         handler.setLevel(logging.INFO)
         handler.setFormatter(formatter)
-    # current_app.logger.addFilter(CustomLogFilter())
+    current_app.logger.addFilter(CustomLogFilter())
+    # frame = logging.currentframe().f_back.f_back
+    frame = inspect.stack()[1]
 
-    current_app.logger.error(msg)
+    extra = {
+        'wpathname': frame.filename,
+        'wlineno': frame.lineno,
+        'wfuncName': frame.function
+    }
+
+    current_app.logger.error(msg,  extra=extra)
