@@ -45,9 +45,6 @@ def app():
         'testapp', static_folder=instance_path, instance_path=instance_path)
     app_.config.update(
         TESTING=True,
-        # SQLALCHEMY_DATABASE_URI=os.environ.get(
-        #     'SQLALCHEMY_DATABASE_URI',
-        #     'sqlite:///:memory:'),
         SQLALCHEMY_DATABASE_URI=os.getenv('SQLALCHEMY_DATABASE_URI',
                                           'postgresql+psycopg2://invenio:dbpass123@postgresql:5432/wekotest'),
         SQLALCHEMY_TRACK_MODIFICATIONS=True,
@@ -71,7 +68,8 @@ def app():
                 record_class='invenio_records_files.api:Record',
             ),
         ),
-        SERVER_NAME='localhost'
+        SERVER_NAME='localhost',
+        SECRET_KEY="SECRET_KEY"
     )
     Babel(app_)
     assets_ext = InvenioAssets(app_)
@@ -150,12 +148,12 @@ def create_app(instance_path):
 
 
 @pytest.fixture(scope="module")
-def testapp(base_app, database):
+def testapp(app):
     """Application with just a database.
 
     Pytest-Invenio also initialise search with the app fixture.
     """
-    yield base_app
+    yield app
 
 
 @pytest.fixture(scope="module")
