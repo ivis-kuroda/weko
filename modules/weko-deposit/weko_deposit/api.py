@@ -1142,8 +1142,14 @@ class WekoDeposit(Deposit):
                                     'WEKO_MIMETYPE_WHITELIST_FOR_ES']
                                 content = lst.copy()
                                 attachment = {}
-                                if file.obj.mimetype in mimetypes:
+                                # if filename in self.exclusion_list,
+                                # do not get file text content for elasticsearch
+                                if (
+                                    file.obj.mimetype in mimetypes
+                                        and filename not in getattr(self, 'non_extract', [])
+                                ):
                                     try:
+                                        # get file text content for elasticsearch
                                         with file.obj.file.storage().open(mode='rb') as fp:
                                             data = ""
                                             if file.obj.mimetype in current_app.config['WEKO_DEPOSIT_TEXTMIMETYPE_WHITELIST_FOR_ES']:
