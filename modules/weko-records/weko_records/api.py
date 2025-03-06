@@ -2670,7 +2670,10 @@ class ItemLink(object):
         # - created: New items to be added
         # - created_supplement: New supplement relationships to be created
         updated, updated_deleted_supplement, created, created_supplement = [], [], [], []
-
+        supplement_key = current_app.config["WEKO_ITEM_REFERENCE_SUPPLEMENT"]
+        print(f"supplement_key: {supplement_key}")
+        print(f"supplement_key[0]: {supplement_key[0]}")
+        print(f"supplement_key[0]: {supplement_key[1]}")
         # Iterate through each item in the input list
         for item in items:
             item_id = item['item_id']
@@ -2683,20 +2686,20 @@ class ItemLink(object):
                 # If the relationship type has changed, handle the update
                 if dst_item and dst_item.reference_type != sele_id:
                     # If the old relationship was a supplement type, mark it for deletion
-                    if dst_item.reference_type in ('isSupplementedBy', 'isSupplementTo'):
+                    if dst_item.reference_type in (supplement_key[0], supplement_key[1]):
                         updated_deleted_supplement.append(item_id)
                     # If the new relationship is a supplement type, create the inverse relationship
-                    if sele_id == 'isSupplementedBy':
+                    if sele_id == supplement_key[1]:
                         created_supplement.append({
                             'src_item_id': item_id,
                             'dst_item_id': self.org_item_id,
-                            'sele_id': 'isSupplementTo'
+                            'sele_id': supplement_key[0]
                         })
-                    elif sele_id == 'isSupplementTo':
+                    elif sele_id == supplement_key[0]:
                         created_supplement.append({
                             'src_item_id': item_id,
                             'dst_item_id': self.org_item_id,
-                            'sele_id': 'isSupplementBy'
+                            'sele_id': supplement_key[1]
                         })
                     # Mark the item as updated
                     updated.append(item)
@@ -2706,22 +2709,23 @@ class ItemLink(object):
                 # If the item is new, add it to the created list
                 created.append(item)
                 # If the new relationship is a supplement type, create the inverse relationship
-                if sele_id == 'isSupplementedBy':
+                if sele_id == supplement_key[1]:
                     created_supplement.append({
                         'src_item_id': item_id,
                         'dst_item_id': self.org_item_id,
-                        'sele_id': 'isSupplementTo'
+                        'sele_id':  supplement_key[0]
                     })
-                elif sele_id == 'isSupplementTo':
+                elif sele_id ==  supplement_key[0]:
                     created_supplement.append({
                         'src_item_id': item_id,
                         'dst_item_id': self.org_item_id,
-                        'sele_id': 'isSupplementBy'
+                        'sele_id': supplement_key[1]
                     })
 
         # Items to be deleted are those still in dst_ids (no longer in the input list)
         deleted = list(dst_ids)
-
+        print(f"created: {created}\nupdated: {updated}\ndeleted: {deleted}")
+        print(f"created_supplement: {created_supplement}\nupdated_deleted_supplement: {updated_deleted_supplement}")
         try:
             # Perform all database operations within a nested transaction
             with db.session.begin_nested():
@@ -2822,5 +2826,5 @@ class ItemLink(object):
         db.session.query(ItemReference).filter(
             ItemReference.src_item_pid.in_(dst_item_ids),
             ItemReference.dst_item_pid == self.org_item_id,
-            ItemReference.reference_type.in_(['isSupplementTo', 'isSupplementBy'])
+            ItemReference.reference_type.in_(current_app.config["WEKO_ITEM_REFERENCE_SUPPLEMENT"])
         ).delete(synchronize_session='fetch')
