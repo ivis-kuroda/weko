@@ -1498,6 +1498,10 @@ def register_item_metadata(item, root_path, owner, is_gakuninrdm=False):
     deposit['_deposit']['owners'] = [int(owner)]
     deposit['_deposit']['created_by'] = int(owner)
     deposit['owner'] = str(owner)
+
+    # to exclude from file text extraction
+    deposit.non_extract = item.pop("non_extract", [])
+
     deposit.commit()
 
     feedback_mail_list = item["metadata"].get("feedback_mail_list")
