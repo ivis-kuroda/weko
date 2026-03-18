@@ -30,14 +30,13 @@ from flask import current_app, render_template
 from flask_babelex import gettext as _
 from flask_mail import Attachment
 from invenio_mail.api import send_mail
-from invenio_stats.utils import QueryCommonReportsHelper, \
-    QueryFileReportsHelper, QueryRecordViewPerIndexReportHelper, \
-    QueryRecordViewReportHelper, QuerySearchReportHelper
 
 from weko_admin.api import TempDirInfo
 
 from .models import AdminSettings, StatisticsEmail
-from .utils import StatisticMail, get_user_report_data, package_reports ,elasticsearch_reindex
+from .utils import (
+    StatisticMail, package_reports, elasticsearch_reindex, get_reports
+)
 from .views import handle_site_license_mail 
 from celery.task.control import inspect
 from weko_search_ui.tasks import check_celery_is_run
@@ -118,35 +117,12 @@ def send_all_reports(report_type=None, year=None, month=None):
     now = datetime.now()
     month = month or now.month
     year = year or now.year
-    all_results = {
-        'file_download': QueryFileReportsHelper.get(
-            year=year, month=month, event='file_download'),
-        'file_preview': QueryFileReportsHelper.get(
-            year=year, month=month, event='file_preview'),
-        'index_access': QueryRecordViewPerIndexReportHelper.get(
-            year=year, month=month),
-        'detail_view': QueryRecordViewReportHelper.get(
-            year=year, month=month),
-        'file_using_per_user': QueryFileReportsHelper.get(
-            year=year, month=month, event='file_using_per_user'),
-        'top_page_access': QueryCommonReportsHelper.get(
-            year=year, month=month, event='top_page_access'),
-        'search_count': QuerySearchReportHelper.get(
-            year=year, month=month),
-        'user_roles': get_user_report_data(),
-        'site_access': QueryCommonReportsHelper.get(
-            year=year, month=month, event='site_access')
-    }
+    reports = get_reports(report_type or "all", year, month)
     with current_app.app_context():
         # Allow for this to be used to get specific emails as well
-        reports = {}
-        if report_type is not None and report_type in all_results:
-            reports[report_type] = all_results[report_type]
-        else:
-            reports = all_results
-
         zip_date = str(year) + '-' + str(month).zfill(2)
         zip_name = 'logReport_' + zip_date + '.zip'
+
         zip_stream = package_reports(reports, year, month)
 
         recepients = StatisticsEmail.get_all_emails()
