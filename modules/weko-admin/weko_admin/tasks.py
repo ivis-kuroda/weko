@@ -22,6 +22,7 @@
 
 import os
 import shutil
+import calendar
 from datetime import datetime, timedelta, timezone
 import traceback
 
@@ -186,12 +187,24 @@ def _due_to_run(schedule):
     """Check if a task needs to be ran."""
     if not schedule['enabled']:
         return False
-    now = datetime.now()
-    return (schedule['frequency'] == 'daily') or \
-        (schedule['frequency'] == 'weekly'
-         and int(schedule['details']) == now.weekday()) or \
-        (schedule['frequency'] == 'monthly'
-         and int(schedule['details']) == now.day)
+    now = datetime.now(tz=timezone.utc)
+
+    if schedule['frequency'] == 'daily':
+        return True
+    if schedule['frequency'] == 'weekly':
+        return int(schedule['details']) == now.weekday()
+    if schedule['frequency'] == 'monthly':
+        if int(schedule['details']) == now.day:
+            return True
+        if int(schedule['details']) == -1:
+            return _is_end_of_month(now)
+    return False
+
+
+def _is_end_of_month(dt):
+    """Check if the date is end of month."""
+    _, last_day = calendar.monthrange(dt.year, dt.month)
+    return dt.day == last_day
 
 
 @shared_task(ignore_results=True)
