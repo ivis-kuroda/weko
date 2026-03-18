@@ -21,6 +21,7 @@
 """Utilities for convert response json."""
 import copy
 import csv
+import traceback
 import orjson
 import math
 import os
@@ -327,6 +328,7 @@ def get_user_report_data():
             .outerjoin(userrole) \
             .group_by(Role.id).all()
     except Exception as e:
+        traceback.print_exc()
         current_app.logger.error('Could not retrieve user report data: ')
         current_app.logger.error(e)
         return {}

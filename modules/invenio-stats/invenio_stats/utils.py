@@ -15,6 +15,7 @@ import operator
 import os
 import re
 import pickle
+import traceback
 from base64 import b64encode
 from datetime import datetime, timedelta
 from math import ceil
@@ -476,6 +477,7 @@ class QueryFileReportsHelper(object):
             open_access_res = open_access.run(**params)
             cls.Calculation(open_access_res, open_access_list, event=event)
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
 
         result['date'] = query_month
@@ -522,6 +524,7 @@ class QueryFileReportsHelper(object):
             cls.Calculation(all_res, all_list, event)
 
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
 
         result['date'] = query_month
@@ -591,10 +594,12 @@ class QuerySearchReportHelper(object):
             all = sorted(all, key=lambda x:x['count'], reverse=True) 
             result['all'] = all
         except es_exceptions.NotFoundError as e:
+            traceback.print_exc()
             current_app.logger.debug(
                 "Indexes do not exist yet:" + str(e.info['error']))
             result['all'] = []
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
             result['all'] = []
 
@@ -687,6 +692,7 @@ class QueryCommonReportsHelper(object):
             Calculation(all_res, all_list)
 
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
 
         result['date'] = query_month
@@ -746,6 +752,7 @@ class QueryCommonReportsHelper(object):
                         institution_name_list)
 
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
 
         result['date'] = query_month
@@ -781,6 +788,7 @@ class QueryCommonReportsHelper(object):
             res = query.run(**params)
             Calculation(res, data_list)
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
 
         result['date'] = query_date
@@ -1112,6 +1120,7 @@ class QueryRecordViewPerIndexReportHelper(object):
                 count += cls.parse_bucket_response(aggs, result)
 
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
             return {}
 
@@ -1225,9 +1234,11 @@ class QueryRecordViewReportHelper(object):
             cls.Calculation(all_res, all_list)
 
         except es_exceptions.NotFoundError as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
             result['all'] = []
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.debug(e)
 
         result['date'] = query_date
