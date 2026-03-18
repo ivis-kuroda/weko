@@ -412,21 +412,41 @@ class QueryFileReportsHelper(object):
         event = kwargs.get('event')
         year = kwargs.get('year')
         month = kwargs.get('month')
+        start_date = kwargs.get('start_date')
+        end_date = kwargs.get('end_date')
 
         try:
-            query_month = str(year) + '-' + str(month).zfill(2)
-            _, lastday = calendar.monthrange(year, month)
-            all_params = {'start_date': query_month + '-01',
-                          'end_date':
-                          query_month + '-' + str(lastday).zfill(2)
-                          + 'T23:59:59',
-                          "should":[{"bool":{"must_not":{"term":{"is_open_access":True}}}},
-                                    {"bool":{"must_not":{"exists":{"field":"is_open_access"}}}}]}
-            params = {'start_date': query_month + '-01',
-                      'end_date':
-                      query_month + '-' + str(lastday).zfill(2)
-                      + 'T23:59:59',
-                      'is_open_access': True}
+            if not start_date or not end_date:
+                query_month = str(year) + '-' + str(month).zfill(2)
+                _, lastday = calendar.monthrange(year, month)
+                all_params = {
+                    'start_date': query_month + '-01',
+                    'end_date': query_month + '-' + str(lastday).zfill(2) + 'T23:59:59',
+                    "should":[
+                        {"bool": {"must_not": {"term":{ "is_open_access": True}}}},
+                        {"bool": {"must_not": {"exists": {"field": "is_open_access"}}}}
+                    ]
+                }
+                params = {
+                    'start_date': query_month + '-01',
+                    'end_date': query_month + '-' + str(lastday).zfill(2) + 'T23:59:59',
+                    'is_open_access': True
+                }
+            else:
+                query_month = f"{start_date}-{end_date}"
+                all_params = {
+                    'start_date': start_date,
+                    'end_date': end_date + 'T23:59:59',
+                    "should":[
+                        {"bool": {"must_not": {"term": {"is_open_access": True}}}},
+                        {"bool": {"must_not": {"exists": {"field": "is_open_access"}}}}
+                    ]
+                }
+                params = {
+                    'start_date': start_date,
+                    'end_date': end_date + 'T23:59:59',
+                    'is_open_access': True
+                }
 
             all_query_name = ''
             open_access_query_name = ''
@@ -474,13 +494,23 @@ class QueryFileReportsHelper(object):
         event = kwargs.get('event')
         year = kwargs.get('year')
         month = kwargs.get('month')
+        start_date = kwargs.get('start_date')
+        end_date = kwargs.get('end_date')
 
         try:
-            query_month = str(year) + '-' + str(month).zfill(2)
-            _, lastday = calendar.monthrange(year, month)
-            params = {'start_date': query_month + '-01',
-                      'end_date': query_month + '-' + str(lastday).zfill(2)
-                      + 'T23:59:59'}
+            if not start_date or not end_date:
+                query_month = str(year) + '-' + str(month).zfill(2)
+                _, lastday = calendar.monthrange(year, month)
+                params = {
+                    'start_date': query_month + '-01',
+                    'end_date': query_month + '-' + str(lastday).zfill(2) + 'T23:59:59'
+                }
+            else:
+                query_month = f"{start_date}-{end_date}"
+                params = {
+                    'start_date': start_date,
+                    'end_date': end_date + 'T23:59:59'
+                }
 
             all_query_name = ['get-file-download-per-user-report',
                               'get-file-preview-per-user-report']
@@ -539,6 +569,8 @@ class QuerySearchReportHelper(object):
             if not start_date or not end_date:
                 start_date, end_date = get_start_end_date(year, month)
                 result['date'] = str(year) + '-' + str(month).zfill(2)
+            else:
+                result['date'] = f"{start_date}-{end_date}"
             params = {'start_date': start_date,
                       'end_date': end_date + 'T23:59:59',
                       'agg_size': kwargs.get('agg_size', 0),
@@ -1047,12 +1079,18 @@ class QueryRecordViewPerIndexReportHelper(object):
         result = {}
         year = kwargs.get('year')
         month = kwargs.get('month')
+        start_date = kwargs.get('start_date')
+        end_date = kwargs.get('end_date')
 
         try:
-            query_month = str(year) + '-' + str(month).zfill(2)
-            _, lastday = calendar.monthrange(year, month)
-            start_date = query_month + '-01'
-            end_date = query_month + '-' + str(lastday).zfill(2) + 'T23:59:59'
+            if not start_date or not end_date:
+                query_month = str(year) + '-' + str(month).zfill(2)
+                _, lastday = calendar.monthrange(year, month)
+                start_date = query_month + '-01'
+                end_date = query_month + '-' + str(lastday).zfill(2) + 'T23:59:59'
+            else:
+                query_month = f"{start_date}-{end_date}"
+
             result = {'date': query_month, 'all': [], 'total': 0}
             first_search = True
             after_key = None
@@ -1174,7 +1212,7 @@ class QueryRecordViewReportHelper(object):
                 _, lastday = calendar.monthrange(year, month)
                 start_date = query_date + '-01'
                 end_date = query_date + '-' + str(lastday).zfill(2)
-                query_date = start_date + '-' + end_date
+            query_date = start_date + '-' + end_date
             params = {'start_date': start_date,
                       'end_date': end_date + 'T23:59:59'}
             if not kwargs.get('ranking', False):

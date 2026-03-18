@@ -22,7 +22,8 @@
 
 import os
 import shutil
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import traceback
 
 from celery import shared_task
 from celery.utils.log import get_task_logger
@@ -111,13 +112,32 @@ def is_reindex_running():
     return False
 
 @shared_task(ignore_results=True)
-def send_all_reports(report_type=None, year=None, month=None):
+def send_all_reports(report_type=None, year=None, month=None, schedule=None):
     """Query elasticsearch for each type of stats report."""
     # By default get the current month and year
-    now = datetime.now()
+    now = datetime.now(tz=timezone.utc)
     month = month or now.month
     year = year or now.year
-    reports = get_reports(report_type or "all", year, month)
+
+    start_date = None
+    end_date = None
+    if schedule:
+        if schedule['frequency'] == 'daily':
+            # on 2 days ago
+            start_date = end_date = (now - timedelta(days=2))
+        if schedule['frequency'] == 'weekly':
+            # from 8 days ago to 2 days ago
+            start_date = (now - timedelta(days=8))
+            end_date = (now - timedelta(days=2))
+        if schedule['frequency'] == 'monthly':
+            # from first day of previous month to last day of previous month
+            end_date = now.replace(day=1) - timedelta(days=1)
+            start_date = end_date.replace(day=1)
+
+    reports = get_reports(
+        report_type or "all", auto=True,
+        start_date=start_date, end_date=end_date,
+    )
     with current_app.app_context():
         # Allow for this to be used to get specific emails as well
         zip_date = str(year) + '-' + str(month).zfill(2)
@@ -139,6 +159,7 @@ def send_all_reports(report_type=None, year=None, month=None):
                       attachments=attachments)
             current_app.logger.info('[{0}] [{1}] '.format(0, 'Sent email'))
         except Exception as e:
+            traceback.print_exc()
             current_app.logger.info('[{0}] [{1}] '.format(1, 'Could not send'))
 
 
@@ -151,7 +172,7 @@ def check_send_all_reports():
                                      dict_to_object=False)
         schedule = schedule if schedule else None
         if schedule and _due_to_run(schedule):
-            send_all_reports.delay()
+            send_all_reports.delay(schedule=schedule)
 
 
 @shared_task(ignore_results=True)
