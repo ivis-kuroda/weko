@@ -591,7 +591,7 @@ class QuerySearchReportHelper(object):
                 current_report['search_key'] = report['search_key']
                 current_report['count'] = report['count']
                 all.append(current_report)
-            all = sorted(all, key=lambda x:x['count'], reverse=True) 
+            all = sorted(all, key=lambda x:x['count'], reverse=True)
             result['all'] = all
         except es_exceptions.NotFoundError as e:
             traceback.print_exc()
@@ -612,26 +612,21 @@ class QueryCommonReportsHelper(object):
     @classmethod
     def get_common_params(cls, **kwargs):
         """Get common params."""
-        year = kwargs.get('year')
-        month = kwargs.get('month')
         start_date = kwargs.get('start_date')
         end_date = kwargs.get('end_date')
         if not start_date or not end_date:
-            if month > 0 and month <= 12:
-                query_date = str(year) + '-' + str(month).zfill(2)
-                _, lastday = calendar.monthrange(year, month)
-                params = {'start_date': query_date + '-01',
-                          'end_date': query_date + '-'
-                          + str(lastday).zfill(2) + 'T23:59:59'}
-            else:
-                query_date = 'all'
-                params = {'interval': 'day'}
+            year = kwargs.get('year')
+            month = kwargs.get('month')
+            query_date = str(year) + '-' + str(month).zfill(2)
+            _, lastday = calendar.monthrange(year, month)
+            start_date = query_date + '-01'
+            end_date = query_date + '-' + str(lastday).zfill(2)
         else:
             query_date = start_date + '-' + end_date
-            params = {'start_date': start_date,
-                      'end_date': end_date + 'T23:59:59',
-                      'agg_size': kwargs.get('agg_size', 0),
-                      'agg_sort': kwargs.get('agg_sort', {'_term': 'desc'})}
+        params = {
+            'start_date': start_date,
+            'end_date': end_date + 'T23:59:59',
+        }
         return query_date, params
 
     @classmethod
@@ -802,12 +797,12 @@ class QuerySitelicenseReportsHelper(object):
         """Get common params.
         Args:
             **kwargs (dict): start date,end_date.
-        
+
         Returns:
             string: Aggregation date.
             dict: Param by Elaticsearch Aggregation.
             list: List Aggregation date by month.
-        
+
         """
         start_date = kwargs.get('start_date')
         end_date = kwargs.get('end_date')
@@ -842,7 +837,7 @@ class QuerySitelicenseReportsHelper(object):
         """Get site license download report.
         Args:
             **kwargs (dict): start date,end_date.
-        
+
         Returns:
             dict: Dict calculation data.
         """
@@ -1133,8 +1128,8 @@ class QueryRecordViewReportHelper(object):
     @classmethod
     def Calculation(cls, res, data_list):
         """Create response object."""
-        for item in res['buckets']: 
-            data = { 
+        for item in res['buckets']:
+            data = {
                 'record_id': item['record_id'],
                 'record_name': item['record_name'],
                 'index_names': item['record_index_names'],
@@ -1613,8 +1608,8 @@ class QueryRankingHelper(object):
     @classmethod
     def Calculation(cls, res, data_list):
         """Create response object."""
-        for item in res['aggregations']['my_buckets']['buckets']: 
-            data = { 
+        for item in res['aggregations']['my_buckets']['buckets']:
+            data = {
                 'key': item['key'],
                 'count': int(item['my_sum']['value'])
             }
