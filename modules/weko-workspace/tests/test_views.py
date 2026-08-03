@@ -19,22 +19,25 @@
 # MA 02111-1307, USA.
 
 """Module tests."""
-import io
+
+import os
 import pytest
 
 from datetime import datetime
+from types import SimpleNamespace
+from unittest.mock import patch, Mock, MagicMock
+
 from flask import url_for, json, jsonify, Response
 from flask_babel import gettext as _
+from sqlalchemy.exc import SQLAlchemyError
+
 from invenio_accounts.testutils import login_user_via_session as login
 from invenio_search.engine import search
-from sqlalchemy.exc import SQLAlchemyError
-from unittest.mock import MagicMock, Mock, patch
 
-from weko_workspace.ext import WekoWorkspace
+from weko_index_tree.models import Index
+from weko_records.models import ItemTypeName
 from weko_workspace.models import WorkspaceDefaultConditions
-from weko_workspace.views import (
-    dbsession_clean
-)
+from weko_workspace.views import dbsession_clean
 
 # ===========================def __init__(self, app=None):():=====================================
 # .tox/c1/bin/pytest tests/test_views.py::test_ext_class_init -vv -s --cov-branch --cov=weko_workspace --cov-report=term --basetemp=/code/modules/weko-workspace/tests/.tox/c1/tmp
@@ -558,7 +561,7 @@ def test_update_workspace_status_management(
                             },
                             "relation": {
                                 "@attributes": {
-                
+
                                 },
                                 "relatedIdentifier": [
                                     {"identifierType": "", "value": ""},
@@ -802,7 +805,6 @@ def test_itemregister(db,users, workflow, app, client,mocker,without_remove_sess
             "itemlogin_cur_step":"item_login",
             "itemlogin_community_id":"comm01"
         }
-        from types import SimpleNamespace
         settings_obj = SimpleNamespace(**admin_settings)
         mocker.patch("weko_workspace.views.session",session)
         with patch("weko_admin.admin.AdminSettings.get", return_value=settings_obj):
@@ -820,7 +822,6 @@ def test_itemregister(db,users, workflow, app, client,mocker,without_remove_sess
             "itemlogin_cur_step":"item_login",
             "itemlogin_community_id":"comm01"
         }
-        from types import SimpleNamespace
         settings_obj = SimpleNamespace(**admin_settings)
         mocker.patch("weko_workspace.views.session",session)
         with patch("weko_admin.admin.AdminSettings.get", return_value=settings_obj):
@@ -839,7 +840,6 @@ def test_itemregister(db,users, workflow, app, client,mocker,without_remove_sess
             "itemlogin_cur_step":"item_login",
             "itemlogin_community_id":"comm01"
         }
-        from types import SimpleNamespace
         settings_obj = SimpleNamespace(**admin_settings)
         mocker.patch("weko_workspace.views.session",session)
         with patch("weko_admin.admin.AdminSettings.get", return_value=settings_obj):
@@ -857,7 +857,6 @@ def test_itemregister(db,users, workflow, app, client,mocker,without_remove_sess
             "itemlogin_cur_step":"item_login",
             "itemlogin_community_id":"comm01"
         }
-        from types import SimpleNamespace
         settings_obj = SimpleNamespace(**admin_settings)
         mocker.patch("weko_workspace.views.session",session)
         with patch("weko_admin.admin.AdminSettings.get", return_value=settings_obj):
@@ -868,7 +867,7 @@ def test_itemregister(db,users, workflow, app, client,mocker,without_remove_sess
 
 
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_views.py::test_get_auto_fill_record_data_ciniiapi -v -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-weko_workspace/.tox/c1/tmp
-def test_get_auto_fill_record_data_ciniiapi(db,users, workflow,client_api, client,mocker,without_remove_session):
+def test_get_auto_fill_record_data_ciniiapi(db,users, workflow, client,mocker,without_remove_session):
     # data あり
     login(client=client, email=users[0]['email'])
     session = {
@@ -877,9 +876,6 @@ def test_get_auto_fill_record_data_ciniiapi(db,users, workflow,client_api, clien
         "itemlogin_cur_step":"item_login",
         "itemlogin_community_id":"comm01"
     }
-    from mock import MagicMock, patch, PropertyMock
-    from unittest.mock import patch, Mock, MagicMock
-    import os
     item_type = Mock()
     filepath = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "data/item_type/15_render.json"
@@ -957,7 +953,7 @@ def test_get_auto_fill_record_data_ciniiapi(db,users, workflow,client_api, clien
 
 
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_views.py::test_get_auto_fill_record_data_jalcapi -v -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-weko_workspace/.tox/c1/tmp
-def test_get_auto_fill_record_data_jalcapi(db,users, workflow,client_api, client,mocker,without_remove_session):
+def test_get_auto_fill_record_data_jalcapi(db,users, workflow, client,mocker,without_remove_session):
     # data あり
     login(client=client, email=users[0]['email'])
     session = {
@@ -966,8 +962,6 @@ def test_get_auto_fill_record_data_jalcapi(db,users, workflow,client_api, client
         "itemlogin_cur_step":"item_login",
         "itemlogin_community_id":"comm01"
     }
-    from unittest.mock import patch, Mock, MagicMock
-    import os
     item_type = Mock()
     filepath = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "data/item_type/15_render.json"
@@ -1045,7 +1039,7 @@ def test_get_auto_fill_record_data_jalcapi(db,users, workflow,client_api, client
 
 
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_views.py::test_get_auto_fill_record_data_dataciteapi -v -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-weko_workspace/.tox/c1/tmp
-def test_get_auto_fill_record_data_dataciteapi(db,users, workflow,client_api, client,mocker,without_remove_session):
+def test_get_auto_fill_record_data_dataciteapi(db,users, workflow, client,mocker,without_remove_session):
     # data あり
     login(client=client, email=users[0]['email'])
     session = {
@@ -1054,8 +1048,6 @@ def test_get_auto_fill_record_data_dataciteapi(db,users, workflow,client_api, cl
         "itemlogin_cur_step":"item_login",
         "itemlogin_community_id":"comm01"
     }
-    from unittest.mock import patch, Mock
-    import os
     item_type = Mock()
     filepath = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "data/item_type/15_render.json"
@@ -1173,13 +1165,12 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
         "owner_user_id": 1,
         "item_custom_sort": {"2": 1}
     }
-    from weko_index_tree.models import Index
+
     index = Index(**index_metadata)
 
     with db.session.begin_nested():
         db.session.add(index)
 
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     data = {
@@ -1218,7 +1209,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
         "itemlogin_cur_step":"item_login",
         "itemlogin_community_id":"comm01"
     }
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     data = {
@@ -1243,7 +1233,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
     data = {
         "recordModel":{'pubdate': '2025-03-11', 'item_30002_title0': [{'subitem_title': 'Identification of cDNA Sequences Encoding the Complement Components of Zebrafish (Danio rerio)', 'subitem_title_language': 'en'}], 'item_30002_creator2': [{'creatorNames': [{'creatorName': 'Vo Kha Tam', 'creatorNameLang': 'en'}]}, {'creatorNames': [{'creatorName': 'Tsujikura Masakazu', 'creatorNameLang': 'en'}]}, {'creatorNames': [{'creatorName': 'Somamoto Tomonori', 'creatorNameLang': 'en'}]}, {'creatorNames': [{'creatorName': 'Nakano Miki', 'creatorNameLang': 'en'}]}], 'item_30002_identifier16': [{'subitem_identifier_uri': '10.5109/16119'}], 'item_30002_relation18': [{'subitem_relation_type_id': {'subitem_relation_type_id_text': '10.5109/16119', 'subitem_relation_type_select': 'DOI'}}], 'item_30002_funding_reference21': [{'subitem_funder_names': [{'subitem_funder_name': 'test1'}]}], 'item_30002_conference34': [{'subitem_conference_names': [{'subitem_conference_name': 'test3'}]}], 'item_30002_file35': [{'version_id': '9e7f93b3-7290-4a6f-aea0-87856279cf48', 'filename': '1_1.png', 'filesize': [{'value': '55 KB'}], 'format': 'image/png', 'date': [{'dateValue': '2025-03-11', 'dateType': 'Available'}], 'accessrole': 'open_access', 'url': {'url': 'https://192.168.56.106/record/2000235/files/1_1.png'}}], 'item_30002_bibliographic_information29': {'bibliographic_titles': [{'bibliographic_title': 'test2'}]}, 'item_30002_source_title23': [{'subitem_source_title': 'Journal of the Faculty of Agriculture, Kyushu University', 'subitem_source_title_language': 'en'}], 'item_30002_source_identifier22': [{'subitem_source_identifier': '0023-6152', 'subitem_source_identifier_type': 'ISSN'}], 'item_30002_volume_number24': {'subitem_volume': '54'}, 'item_30002_issue_number25': {'subitem_issue': '2'}, 'item_30002_page_start27': {'subitem_start_page': '373'}, 'item_30002_page_end28': {'subitem_end_page': '387'}, 'item_30002_date11': [{'subitem_date_issued_datetime': '2009', 'subitem_date_issued_type': 'Issued'}], 'item_30002_access_rights4': {'subitem_access_right': 'embargoed access'}, 'item_30002_resource_type13': {'resourcetype': 'conference paper', 'resourceuri': 'http://purl.org/coar/resource_type/c_5794'}, 'item_30002_version_type15': {'subitem_version_type': 'AO'}, 'deleted_items': []}
     }
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     with patch("weko_admin.admin.AdminSettings.get", return_value=settings_obj):
@@ -1296,7 +1285,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
     return_value = {
             "error_id":None,
         }
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     data = {
@@ -1357,7 +1345,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
     return_value = {
             "error_id":None,
         }
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     data = {
@@ -1394,7 +1381,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
         "itemlogin_cur_step":"item_login",
         "itemlogin_community_id":"comm01"
     }
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     data = {
@@ -1419,7 +1405,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
     data = {
         "recordModel":{'pubdate': '2025-03-11', 'item_30002_title0': [{'subitem_title': 'Identification of cDNA Sequences Encoding the Complement Components of Zebrafish (Danio rerio)', 'subitem_title_language': 'en'}], 'item_30002_creator2': [{'creatorNames': [{'creatorName': 'Vo Kha Tam', 'creatorNameLang': 'en'}]}, {'creatorNames': [{'creatorName': 'Tsujikura Masakazu', 'creatorNameLang': 'en'}]}, {'creatorNames': [{'creatorName': 'Somamoto Tomonori', 'creatorNameLang': 'en'}]}, {'creatorNames': [{'creatorName': 'Nakano Miki', 'creatorNameLang': 'en'}]}], 'item_30002_identifier16': [{'subitem_identifier_uri': '10.5109/16119'}], 'item_30002_relation18': [{'subitem_relation_type_id': {'subitem_relation_type_id_text': '10.5109/16119', 'subitem_relation_type_select': 'DOI'}}], 'item_30002_funding_reference21': [{'subitem_funder_names': [{'subitem_funder_name': 'test1'}]}], 'item_30002_conference34': [{'subitem_conference_names': [{'subitem_conference_name': 'test3'}]}], 'item_30002_file35': [{'version_id': '9e7f93b3-7290-4a6f-aea0-87856279cf48', 'filename': '1_1.png', 'filesize': [{'value': '55 KB'}], 'format': 'image/png', 'date': [{'dateValue': '2025-03-11', 'dateType': 'Available'}], 'accessrole': 'open_access', 'url': {'url': 'https://192.168.56.106/record/2000235/files/1_1.png'}}], 'item_30002_bibliographic_information29': {'bibliographic_titles': [{'bibliographic_title': 'test2'}]}, 'item_30002_source_title23': [{'subitem_source_title': 'Journal of the Faculty of Agriculture, Kyushu University', 'subitem_source_title_language': 'en'}], 'item_30002_source_identifier22': [{'subitem_source_identifier': '0023-6152', 'subitem_source_identifier_type': 'ISSN'}], 'item_30002_volume_number24': {'subitem_volume': '54'}, 'item_30002_issue_number25': {'subitem_issue': '2'}, 'item_30002_page_start27': {'subitem_start_page': '373'}, 'item_30002_page_end28': {'subitem_end_page': '387'}, 'item_30002_date11': [{'subitem_date_issued_datetime': '2009', 'subitem_date_issued_type': 'Issued'}], 'item_30002_access_rights4': {'subitem_access_right': 'embargoed access'}, 'item_30002_resource_type13': {'resourcetype': 'conference paper', 'resourceuri': 'http://purl.org/coar/resource_type/c_5794'}, 'item_30002_version_type15': {'subitem_version_type': 'AO'}, 'deleted_items': []}
     }
-    from types import SimpleNamespace
     settings_obj = SimpleNamespace(**admin_settings)
     mocker.patch("weko_workspace.views.session",session)
     with patch("weko_admin.admin.AdminSettings.get", return_value=settings_obj):
@@ -1431,7 +1416,6 @@ def test_itemregister_save(db,users,location, workflow, app, client,mocker,witho
 
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_views.py::test_dbsession_clean -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-workspace/.tox/c1/tmp
 def test_dbsession_clean(app, db):
-    from weko_records.models import ItemTypeName
     # not exists exception
     itemtype_name1 = ItemTypeName(id=1,name="テスト1",has_site_license=True, is_active=True)
     db.session.add(itemtype_name1)
@@ -1452,7 +1436,7 @@ def test_dbsession_clean(app, db):
     assert ItemTypeName.query.filter_by(id=3).first() is None
 
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_views.py::test_get_auto_fill_record_data_arXivapi -v -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-weko_workspace/.tox/c1/tmp
-def test_get_auto_fill_record_data_arXivapi(db,users, workflow,client_api, client,mocker,without_remove_session):
+def test_get_auto_fill_record_data_arXivapi(db,users, workflow, client,mocker,without_remove_session):
     # data あり
     login(client=client, email=users[0]['email'])
     session = {
@@ -1461,8 +1445,6 @@ def test_get_auto_fill_record_data_arXivapi(db,users, workflow,client_api, clien
         "itemlogin_cur_step":"item_login",
         "itemlogin_community_id":"comm01"
     }
-    from unittest.mock import patch, Mock
-    import os
     item_type = Mock()
     filepath = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "data/item_type/15_render.json"

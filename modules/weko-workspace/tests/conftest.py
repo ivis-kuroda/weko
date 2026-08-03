@@ -20,7 +20,6 @@
 
 """Pytest configuration."""
 
-import base64
 import json
 import os
 import pytest
@@ -30,6 +29,8 @@ import tempfile
 import uuid
 
 from datetime import datetime
+from unittest.mock import patch, Mock
+
 from flask import Flask, url_for, Response
 from flask_babel import Babel, lazy_gettext as _
 from flask_menu import Menu
@@ -41,9 +42,6 @@ from invenio_accounts.testutils import create_test_user
 from invenio_assets import InvenioAssets
 from invenio_admin import InvenioAdmin
 from invenio_cache import InvenioCache
-from invenio_communities.views.ui import (
-    blueprint as invenio_communities_blueprint
-)
 from invenio_communities.models import Community
 from invenio_db import InvenioDB, db as db_
 from invenio_files_rest import InvenioFilesREST
@@ -58,8 +56,6 @@ from invenio_records_ui import InvenioRecordsUI
 from invenio_stats import InvenioStats
 from invenio_search import RecordsSearch,InvenioSearch
 from invenio_search.engine import search
-from io import BytesIO
-from mock import patch,Mock
 from sqlalchemy_utils.functions import create_database, database_exists
 from tests.helpers import json_data
 
@@ -114,9 +110,7 @@ from weko_workspace.models import (
     WorkspaceDefaultConditions, WorkspaceStatusManagement
 )
 from weko_workspace.views import (
-    workspace_blueprint as weko_workspace_blueprint
-)
-from weko_workspace.views import (
+    workspace_blueprint as weko_workspace_blueprint,
     blueprint_itemapi as weko_workspace_blueprint_itemapi
 )
 
@@ -617,14 +611,6 @@ def mocker_itemtype(mocker):
     mocker.patch("weko_records.api.ItemTypes.get_by_id", return_value=item_type)
     mocker.patch('weko_records.api.Mapping.get_record', return_value=item_type_mapping)
 
-
-@pytest.yield_fixture()
-def client_api(app):
-    from weko_workspace.views import blueprint_itemapi as weko_workspace_blueprint_itemapi
-    app.register_blueprint(weko_workspace_blueprint_itemapi)
-
-    with app.test_client() as client:
-        yield client
 
 @pytest.yield_fixture()
 def client(app):

@@ -50,7 +50,7 @@ from .api import CiNiiURL, JALCURL, DATACITEURL, JamasURL, arXivURL
 
 def is_update_cache():
     """Return True if Autofill Api has been updated.
-    
+
     Returns:
         bool: True if the Autofill API has been updated, False otherwise.
     """
@@ -143,7 +143,7 @@ def get_search_itemlist():
         size = 10000
         search_index = current_app.config["WEKO_WORKSPACE_ITEM_SEARCH_INDEX"]
         search_obj = RecordsSearch(index=search_index)
-        search = search_obj.with_preference_param().params(version=True)
+        records_search = search_obj.with_preference_param().params(version=True)
 
         # Set the search query
         publish_status_match = dsl.Q("terms", publish_status=[
@@ -162,37 +162,37 @@ def get_search_itemlist():
         must = []
         must.append(dsl.Q("bool", should=shuld))
         must.append(dsl.Q("bool", must=dsl.Q("match", relation_version_is_last="true")))
-        search = search.filter(dsl.Q("bool", must=must))
-        search = search.query(dsl.Q("bool", must=dsl.Q("match_all")))
+        records_search = records_search.filter(dsl.Q("bool", must=must))
+        records_search = records_search.query(dsl.Q("bool", must=dsl.Q("match_all")))
 
         # Set size / Exclude content field from the source
         src = {
             "size": size,
             "_source": {"excludes": ["content"]}
         }
-        search._extra.update(src)
+        records_search._extra.update(src)
 
         # Set sorting
-        search = search.sort("-control_number")
+        records_search = records_search.sort("-control_number")
 
         # Execute search. Use search_after to retrieve all records
         records = []
-        current_app.logger.debug(f"[workspace] search obj: {search.to_dict()}")
-        page = search.execute().to_dict()
+        current_app.logger.debug(f"[workspace] search obj: {records_search.to_dict()}")
+        page = records_search.execute().to_dict()
         current_app.logger.debug(f"[workspace] search result: {page}")
         while page.get('hits', {}).get('hits', []):
             records.extend(page.get('hits', {}).get('hits', []))
             if len(page.get('hits', {}).get('hits', [])) < size:
                 break
-            search = search.extra(search_after=page.get('hits', {}).get('hits', [])[-1].get('sort'))
-            current_app.logger.debug(f"[workspace] search obj: {search.to_dict()}")
-            page = search.execute().to_dict()
+            records_search = records_search.extra(search_after=page.get('hits', {}).get('hits', [])[-1].get('sort'))
+            current_app.logger.debug(f"[workspace] search obj: {records_search.to_dict()}")
+            page = records_search.execute().to_dict()
             current_app.logger.debug(f"[workspace] search result: {page}")
         return records
 
     except search.TransportError as e:
         traceback.print_exc()
-        current_app.logger.error(f"Failed to get workflow item list from search: {e} / {search.to_dict()}")
+        current_app.logger.error(f"Failed to get workflow item list from search: {e} / {records_search.to_dict()}")
         return None
     except Exception as e:
         traceback.print_exc()
@@ -566,7 +566,7 @@ def get_jamas_autofill_item(item_type_id):
 
     Args:
         item_type_id (int): The item type ID.
-    
+
     Returns:
         dict: A dictionary containing the Jamas required item data.
     """
@@ -696,7 +696,7 @@ def get_jamas_source_data(data):
         list: A list containing dictionaries with source identifier values and their types.
     """
     result = []
-    
+
     if isinstance(data, str):
         result.append({
             '@value': data,
@@ -748,7 +748,7 @@ def get_jamas_relation_data(issn, eissn, doi):
                 '@value': d,
                 '@type': "ISSN"
             })
-    
+
     # eissn
     if isinstance(eissn, str):
         result.append({
@@ -761,7 +761,7 @@ def get_jamas_relation_data(issn, eissn, doi):
                 '@value': d,
                 '@type': "EISSN"
             })
-    
+
     return result
 
 
@@ -1073,7 +1073,7 @@ def pack_single_value_as_dict(data):
 
     Args:
         data (str): The value to be packed.
-    
+
     Returns:
         dict: A dictionary containing the value.
     """
@@ -1096,7 +1096,7 @@ def get_cinii_subject_data(data, title):
     Args:
         data (list): A list of subjects.
         title (str): The title of the item.
-    
+
     Returns:
         list: A list of dictionaries containing the subject data.
     """
@@ -1123,7 +1123,7 @@ def get_cinii_creator_data(data):
 
     Args:
         data (list): A list of creator names.
-    
+
     Returns:
         list: A list of lists, each containing a dictionary with the creator name and language.
     """
@@ -1306,7 +1306,7 @@ def get_key_value(schema_form, val, parent_key ,val2={}):
                 parent_key,
                 value_key.get("dateType")
             ).get('key')
-        
+
     if val2.get("@attributes") is not None:
         value_key = val2.get('@attributes')
         if value_key.get("relationType") is not None:
@@ -1332,10 +1332,10 @@ def get_item_id(item_type_id):
     """Get dictionary contain item id.
 
     Get from mapping between item type and jpcoar
-    
+
     Args:
         item_type_id (int): The item type ID.
-    
+
     Returns:
         dict: A dictionary containing the item ID and its corresponding jpcoar mapping.
     """
@@ -1510,7 +1510,7 @@ def get_specific_key_path(des_key, form):
     Args:
         des_key (list): The desired key path to search for.
         form (dict or list): The form data to search in.
-    
+
     Returns:
         tuple (existed, path_result):
             A tuple where `existed` is a boolean indicating if the key exists,
@@ -1645,8 +1645,8 @@ def fill_data(form_model, autofill_data, schema=None, exclude_duplicate_lang=Fal
                         result[key].append(new_model.copy())
                 else:
                     result = fill_data(form_model, autofill_data[0], schema, exclude_duplicate_lang)
-        
-        
+
+
     elif isinstance(autofill_data, dict):
         if isinstance(form_model, dict):
             for k, v in form_model.items():
@@ -1825,7 +1825,7 @@ def get_jalc_publisher_data(data):
 
     Args:
         data (list): A list of publisher names.
-    
+
     Returns:
         list: A list of dictionaries containing the publisher names and their languages.
     """
@@ -1958,7 +1958,7 @@ def get_jalc_numpage(startingPage, endingPage):
     Args:
         startingPage (str): The starting page number as a string.
         endingPage (str): The ending page number as a string.
-    
+
     Returns:
         dict: A dictionary containing the number of pages packed as '@value'.
     """
@@ -2026,7 +2026,7 @@ def get_jalc_product_identifier(data):
 
     Args:
         data (str): The DOI of the item.
-    
+
     Returns:
         list: A list containing a dictionary with the product identifier packed as '@value'.
     """
@@ -2041,10 +2041,10 @@ def get_jalc_product_identifier(data):
 
 def get_jalc_autofill_item(item_id):
     """Get JaLC autofill item.
-    
+
     Args:
         item_id (int): The item ID.
-        
+
     Returns:
         dict: A dictionary containing the JaLC required item data.
     """
@@ -2171,7 +2171,7 @@ def get_datacite_title_data(data):
 
     Args:
         data (list): A list of dictionaries containing title information.
-    
+
     Returns:
         list: A list of dictionaries, each containing a title and its language.
     """
@@ -2199,7 +2199,7 @@ def get_datacite_creator_data(data):
 
     Args:
         data (list): A list of dictionaries containing creator names and languages.
-    
+
     Returns:
         list: A list of lists, each containing a dictionary with the creator names and languages.
     """
@@ -2359,10 +2359,10 @@ def get_datacite_product_identifier(data):
 
 def get_datacite_autofill_item(item_id):
     """Get DataCite autofill item.
-    
+
     Args:
         item_id (int): The item ID.
-        
+
     Returns:
         dict: A dictionary containing the DataCite required item data.
     """
@@ -2441,7 +2441,7 @@ def get_arXiv_data_by_key(api, keyword):
 
 
 def get_arXiv_title_data(data):
-    
+
     result = list()
     new_data = dict()
     new_data["@value"] = data
@@ -2459,7 +2459,7 @@ def get_arXiv_identifier_data(data_id):
 
     result_id.append(new_data_id)
     result.append(result_id)
-    
+
     return result
 
 def get_arXiv_date_data(data_published,data_updated):
@@ -2508,7 +2508,7 @@ def get_arXiv_creator_data(data_name):
 
     if isinstance(data_name, dict):
         data_name=[data_name]
-    
+
     for data in data_name:
        new_data_name = dict()
        name_result = list()
@@ -2573,18 +2573,18 @@ def get_arXiv_subject_data(data_category,data_primary_category):
     return result
 
 def get_arXiv_autofill_item(item_id):
-    
+
     jpcoar_item = get_item_id(item_id)
     arXiv_req_item = dict()
     for key in current_app.config.get("WEKO_WORKSPACE_ARXIV_REQUIRED_ITEM"):
         if jpcoar_item.get(key) is not None:
             arXiv_req_item[key] = jpcoar_item.get(key)
-        
+
         if key == 'identifier':
             for i in range(len(arXiv_req_item[key])):
                 if not ( "system_identifier_" in  str(arXiv_req_item[key][i].get(key).get("model_id"))):
                    arXiv_req_item[key]=arXiv_req_item[key][i].get(key)
                    break
-        
+
     return arXiv_req_item
 

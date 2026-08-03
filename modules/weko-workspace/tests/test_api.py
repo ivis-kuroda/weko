@@ -1,5 +1,5 @@
 import pytest
-from mock import patch
+from unittest.mock import patch
 from collections import OrderedDict
 from requests.cookies import RequestsCookieJar
 from requests.exceptions import RequestException
@@ -17,7 +17,7 @@ class TestJamasURL:
         with pytest.raises(ValueError) as e:
             jamas = JamasURL(None)
             assert str(e) == "DOI is required."
-        
+
         # not exist timeout,http_proxy,https_proxy
         jamas = JamasURL("10.5109/16119")
         assert jamas._doi == "10.5109/16119"
@@ -29,7 +29,7 @@ class TestJamasURL:
         assert jamas._doi == "10.5109/16119"
         assert jamas._timeout == 10
         assert jamas._proxy == {"http": "test_http_proxy", "https": "test_https_proxy"}
-    
+
 
 #     def _create_endpoint(self):
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_api.py::TestJamasURL::test_create_endpoint -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-workspace/.tox/c1/tmp
@@ -89,7 +89,7 @@ class TestJamasURL:
                 timeout=5,
                 proxies={'http': 'test_http_proxy', 'https': 'test_https_proxy'},
             )
-        
+
         # login ng
         mock_response._content = b'login ng'
         with patch('weko_workspace.api.requests.post', return_value=mock_response) as mock_post:
@@ -102,7 +102,7 @@ class TestJamasURL:
                 timeout=5,
                 proxies={'http': 'test_http_proxy', 'https': 'test_https_proxy'},
             )
-        
+
         # status_code is not 200
         mock_response.status_code = 400
         with patch('weko_workspace.api.requests.post', return_value=mock_response) as mock_post:
@@ -148,7 +148,7 @@ class TestJamasURL:
                 timeout=5,
                 proxies={'http': 'test_http_proxy', 'https': 'test_https_proxy'},
             )
-        
+
         # logout ng
         mock_response._content = b'logout ng'
         with patch('weko_workspace.api.requests.post', return_value=mock_response) as mock_post:
@@ -162,7 +162,7 @@ class TestJamasURL:
                 timeout=5,
                 proxies={'http': 'test_http_proxy', 'https': 'test_https_proxy'},
             )
-        
+
         # status_code is not 200
         mock_response.status_code = 400
         with patch('weko_workspace.api.requests.post', return_value=mock_response) as mock_post:
@@ -216,7 +216,7 @@ class TestJamasURL:
             with patch('weko_workspace.api.JamasURL._do_http_request', side_effect=Exception("request error")):
                 result = jamas.get_data()
                 assert result == {'response': '', 'error': 'request error'}
-        
+
         with patch('weko_workspace.api.JamasURL._login', return_value=False):
             # login failed
             result = jamas.get_data()
@@ -232,19 +232,19 @@ class TestCiNiiURL:
         with pytest.raises(ValueError) as e:
             cini = CiNiiURL(None)
             assert str(e) == "DOI is required."
-        
+
         # not exist timeout,http_proxy,https_proxy
         cini = CiNiiURL("10.5109/16119")
         assert cini._doi == "10.5109/16119"
         assert cini._timeout == 5
         assert cini._proxy == {"http":"","https":""}
-        
+
         # exist timeout,http_proxy,https_proxy
         cini = CiNiiURL("10.5109/16119",timeout=10,http_proxy="test_http_proxy",https_proxy="test_https_proxy")
         assert cini._doi == "10.5109/16119"
         assert cini._timeout == 10
         assert cini._proxy == {"http":"test_http_proxy","https":"test_https_proxy"}
-        
+
 
 #     def _create_endpoint(self):
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_api.py::TestCiNiiURL::test_create_endpoint -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-workspace/.tox/c1/tmp
@@ -290,7 +290,7 @@ class TestCiNiiURL:
         res = Response()
         res._content = b'{"key":"test response"}'
         res.status_code = 200
-        
+
         with patch("weko_workspace.api.CiNiiURL._do_http_request",return_value=res):
             result = cini.get_data()
             assert result == {"response":{"key":"test response"},"error":""}
@@ -299,7 +299,7 @@ class TestCiNiiURL:
         with patch("weko_workspace.api.CiNiiURL._do_http_request",return_value=res):
             result = cini.get_data()
             assert result == {"response":"","error":""}
-        
+
         # raise Exception
         with patch("weko_workspace.api.CiNiiURL._do_http_request",side_effect=Exception("request error")):
             result = cini.get_data()
@@ -315,19 +315,19 @@ class TestJALCURL:
         with pytest.raises(ValueError) as e:
             jalc = JALCURL(None)
             assert str(e) == "DOI is required."
-        
+
         # not exist timeout,http_proxy,https_proxy
         jalc = JALCURL("10.5109/16119")
         assert jalc._doi == "10.5109/16119"
         assert jalc._timeout == 5
         assert jalc._proxy == {"http":"","https":""}
-        
+
         # exist timeout,http_proxy,https_proxy
         jalc = JALCURL("10.5109/16119",timeout=10,http_proxy="test_http_proxy",https_proxy="test_https_proxy")
         assert jalc._doi == "10.5109/16119"
         assert jalc._timeout == 10
         assert jalc._proxy == {"http":"test_http_proxy","https":"test_https_proxy"}
-        
+
 
 #     def _create_endpoint(self):
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_api.py::TestJALCURL::test_create_endpoint -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-workspace/.tox/c1/tmp
@@ -373,7 +373,7 @@ class TestJALCURL:
         res = Response()
         res._content = b'{"key":"test response"}'
         res.status_code = 200
-        
+
         with patch("weko_workspace.api.JALCURL._do_http_request",return_value=res):
             result = jalc.get_data()
             assert result == {"response":{"key":"test response"},"error":""}
@@ -382,7 +382,7 @@ class TestJALCURL:
         with patch("weko_workspace.api.JALCURL._do_http_request",return_value=res):
             result = jalc.get_data()
             assert result == {"response":"","error":""}
-        
+
         # raise Exception
         with patch("weko_workspace.api.JALCURL._do_http_request",side_effect=Exception("request error")):
             result = jalc.get_data()
@@ -398,19 +398,19 @@ class TestDATACITEURL:
         with pytest.raises(ValueError) as e:
             datacite = DATACITEURL(None)
             assert str(e) == "DOI is required."
-        
+
         # not exist timeout,http_proxy,https_proxy
         datacite = DATACITEURL("10.5109/16119")
         assert datacite._doi == "10.5109/16119"
         assert datacite._timeout == 5
         assert datacite._proxy == {"http":"","https":""}
-        
+
         # exist timeout,http_proxy,https_proxy
         datacite = DATACITEURL("10.5109/16119",timeout=10,http_proxy="test_http_proxy",https_proxy="test_https_proxy")
         assert datacite._doi == "10.5109/16119"
         assert datacite._timeout == 10
         assert datacite._proxy == {"http":"test_http_proxy","https":"test_https_proxy"}
-        
+
 
 #     def _create_endpoint(self):
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_api.py::TestDATACITEURL::test_create_endpoint -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-workspace/.tox/c1/tmp
@@ -456,7 +456,7 @@ class TestDATACITEURL:
         res = Response()
         res._content = b'{"key":"test response"}'
         res.status_code = 200
-        
+
         with patch("weko_workspace.api.DATACITEURL._do_http_request",return_value=res):
             result = datacite.get_data()
             assert result == {"response":{"key":"test response"},"error":""}
@@ -465,7 +465,7 @@ class TestDATACITEURL:
         with patch("weko_workspace.api.DATACITEURL._do_http_request",return_value=res):
             result = datacite.get_data()
             assert result == {"response":"","error":""}
-        
+
         # raise Exception
         with patch("weko_workspace.api.DATACITEURL._do_http_request",side_effect=Exception("request error")):
             result = datacite.get_data()
@@ -480,19 +480,19 @@ class TestarXivURL:
         with pytest.raises(ValueError) as e:
             arXiv = arXivURL(None)
             assert str(e) == "DOI is required."
-        
+
         # not exist timeout,http_proxy,https_proxy
         arXiv = arXivURL("10.5109/16119")
         assert arXiv._doi == "10.5109/16119"
         assert arXiv._timeout == 5
         assert arXiv._proxy == {"http":"","https":""}
-        
+
         # exist timeout,http_proxy,https_proxy
         arXiv = arXivURL("10.5109/16119",timeout=10,http_proxy="test_http_proxy",https_proxy="test_https_proxy")
         assert arXiv._doi == "10.5109/16119"
         assert arXiv._timeout == 10
         assert arXiv._proxy == {"http":"test_http_proxy","https":"test_https_proxy"}
-        
+
 
 #     def _create_endpoint(self):
 # .tox/c1/bin/pytest --cov=weko_workspace tests/test_api.py::TestarXivURL::test_create_endpoint -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-workspace/.tox/c1/tmp
@@ -538,7 +538,7 @@ class TestarXivURL:
         res = Response()
         res._content = b'<feed><entry><id>id</id></entry></feed>'
         res.status_code = 200
-        
+
         with patch("weko_workspace.api.arXivURL._do_http_request",return_value=res):
             result = arXiv.get_data()
             assert result == {"response":OrderedDict([('feed', OrderedDict([('entry', OrderedDict([('id', 'id')]))]))]),"error":""}
@@ -547,7 +547,7 @@ class TestarXivURL:
         with patch("weko_workspace.api.arXivURL._do_http_request",return_value=res):
             result = arXiv.get_data()
             assert result == {"response":"","error":""}
-        
+
         # raise Exception
         with patch("weko_workspace.api.arXivURL._do_http_request",side_effect=Exception("request error")):
             result = arXiv.get_data()
