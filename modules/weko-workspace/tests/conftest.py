@@ -130,12 +130,12 @@ class TestSearch(RecordsSearch):
         super(TestSearch, self).__init__(**kwargs)
         self._extra.update(**{'_source': {'excludes': ['_access']}})
 
-@pytest.yield_fixture(scope='session')
+@pytest.fixture(scope='session')
 def search_class():
     """Search class."""
     yield TestSearch
 
-@pytest.yield_fixture()
+@pytest.fixture
 def instance_path():
     """Temporary instance path."""
     path = tempfile.mkdtemp()
@@ -184,7 +184,7 @@ class MockSearch():
         def health(self, wait_for_status="", request_timeout=0):
             pass
 
-@pytest.fixture()
+@pytest.fixture
 def cache_config():
     """Generate cache configuration."""
     CACHE_TYPE = os.environ.get("CACHE_TYPE", "simple")
@@ -206,7 +206,7 @@ def cache_config():
         )
     return config
 
-@pytest.fixture()
+@pytest.fixture
 def base_app(instance_path, search_class, cache_config):
     """Flask application fixture."""
     app_ = Flask('testapp', instance_path=instance_path)
@@ -556,14 +556,14 @@ def base_app(instance_path, search_class, cache_config):
     return app_
 
 
-@pytest.yield_fixture()
+@pytest.fixture
 def app(base_app):
     """Flask application fixture."""
     with base_app.app_context():
         yield base_app
 
 
-@pytest.yield_fixture()
+@pytest.fixture
 def db(app):
     """Database fixture."""
     if not database_exists(str(db_.engine.url)):
@@ -575,7 +575,7 @@ def db(app):
     # drop_database(str(db_.engine.url))
 
 
-@pytest.fixture()
+@pytest.fixture
 def mocker_itemtype(mocker):
     item_type = Mock()
     filepath = os.path.join(
@@ -612,7 +612,7 @@ def mocker_itemtype(mocker):
     mocker.patch('weko_records.api.Mapping.get_record', return_value=item_type_mapping)
 
 
-@pytest.yield_fixture()
+@pytest.fixture
 def client(app):
     """make a test client.
     Args:
@@ -623,7 +623,7 @@ def client(app):
     with app.test_client() as client:
         yield client
 
-@pytest.yield_fixture()
+@pytest.fixture
 def guest(client):
     with client.session_transaction() as sess:
         sess['guest_token'] = "test_guest_token"
@@ -631,7 +631,7 @@ def guest(client):
         sess['guest_url'] = url_for("weko_workflow.display_guest_activity",file_name="test_file")
     yield client
 
-@pytest.yield_fixture()
+@pytest.fixture
 def req_context(client,app):
     with app.test_request_context():
         yield client
@@ -642,12 +642,12 @@ def redis_connect(app):
     redis_connection.put('updated_json_schema_A-00000001-10001',bytes('test', 'utf-8'))
     return redis_connection
 
-@pytest.fixture()
+@pytest.fixture
 def without_remove_session(app):
     with patch("weko_workflow.views.db.session.remove"):
         yield
 
-@pytest.fixture()
+@pytest.fixture
 def users(app, db):
     """Create users."""
     ds = app.extensions['invenio-accounts'].datastore
@@ -780,7 +780,7 @@ def users(app, db):
         {'email': student.email,'id': student.id, 'obj': student}
     ]
 
-@pytest.fixture()
+@pytest.fixture
 def workspaceData(db):
     workspace_default_conditions_data = json_data("data/public.workspace_default_conditions.json")[0]
 
@@ -820,7 +820,7 @@ def workspaceData(db):
 
     return [workspace_default_conditions, workspace_status_management_0]
 
-@pytest.fixture()
+@pytest.fixture
 def oa_status(db):
     """Create OA status data."""
     oa_status_1 = OaStatus(
@@ -839,7 +839,7 @@ def oa_status(db):
         db.session.add(oa_status_2)
     db.session.commit()
 
-@pytest.fixture()
+@pytest.fixture
 def item_type(db):
     item_types = []
 
@@ -873,7 +873,7 @@ def item_type(db):
 
     return item_types
 
-@pytest.fixture()
+@pytest.fixture
 def action_data(db):
     action_datas=dict()
     with open('tests/data/actions.json', 'r') as f:
@@ -896,7 +896,7 @@ def action_data(db):
     db.session.commit()
     return actions_db, actionstatus_db
 
-@pytest.fixture()
+@pytest.fixture
 def workflow(app, db, item_type, action_data, users):
     flow_define = FlowDefine(flow_id=uuid.uuid4(),
                              flow_name='Registration Flow',
@@ -1009,7 +1009,7 @@ def workflow(app, db, item_type, action_data, users):
         "workflow":workflow
     }
 
-@pytest.fixture()
+@pytest.fixture
 def location(app, db, instance_path):
     with db.session.begin_nested():
         Location.query.delete()
