@@ -20779,13 +20779,16 @@ def test_get_search_data_acl_user0(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin",
             "contributor",
+            "generaluser",
             "originalroleuser2",
+            "originalroleuser",
             "repoadmin",
-            "sysadmin",
+            "user",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
     url = url_for(
@@ -20796,13 +20799,16 @@ def test_get_search_data_acl_user0(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin@test.org",
             "contributor@test.org",
+            "generaluser@test.org",
             "originalroleuser2@test.org",
+            "originalroleuser@test.org",
             "repoadmin@test.org",
-            "sysadmin@test.org",
+            "user@test.org",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
 
@@ -20823,13 +20829,16 @@ def test_get_search_data_acl_user1(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin",
             "contributor",
+            "generaluser",
             "originalroleuser2",
+            "originalroleuser",
             "repoadmin",
-            "sysadmin",
+            "user",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
     url = url_for(
@@ -20840,13 +20849,16 @@ def test_get_search_data_acl_user1(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin@test.org",
             "contributor@test.org",
+            "generaluser@test.org",
             "originalroleuser2@test.org",
+            "originalroleuser@test.org",
             "repoadmin@test.org",
-            "sysadmin@test.org",
+            "user@test.org",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
 
@@ -20867,13 +20879,16 @@ def test_get_search_data_acl_user2(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin",
             "contributor",
+            "generaluser",
             "originalroleuser2",
+            "originalroleuser",
             "repoadmin",
-            "sysadmin",
+            "user",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
     url = url_for(
@@ -20884,13 +20899,16 @@ def test_get_search_data_acl_user2(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin@test.org",
             "contributor@test.org",
+            "generaluser@test.org",
             "originalroleuser2@test.org",
+            "originalroleuser@test.org",
             "repoadmin@test.org",
-            "sysadmin@test.org",
+            "user@test.org",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
 
@@ -20911,13 +20929,16 @@ def test_get_search_data_acl_user3(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin",
             "contributor",
+            "generaluser",
             "originalroleuser2",
+            "originalroleuser",
             "repoadmin",
-            "sysadmin",
+            "user",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
     url = url_for(
@@ -20928,13 +20949,16 @@ def test_get_search_data_acl_user3(client_api, users, db_userprofile, db_session
     assert json.loads(res.data) == {
         "error": "",
         "results": [
+            "comadmin@test.org",
             "contributor@test.org",
+            "generaluser@test.org",
             "originalroleuser2@test.org",
+            "originalroleuser@test.org",
             "repoadmin@test.org",
-            "sysadmin@test.org",
+            "user@test.org",
         ],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
 
@@ -20950,16 +20974,16 @@ def test_get_search_data_query_param(app, client_api, users, db_userprofile, db_
 
     # the q parameter narrows the candidates down to a prefix match
     url = url_for(
-        "weko_items_ui_api.get_search_data", data_type="username", q="sys",
+        "weko_items_ui_api.get_search_data", data_type="username", q="orig",
         _external=True,
     )
     res = client_api.get(url)
     assert res.status_code == 200
     assert json.loads(res.data) == {
         "error": "",
-        "results": ["sysadmin"],
-        "query": "sys",
-        "count": 1,
+        "results": ["originalroleuser2", "originalroleuser"],
+        "query": "orig",
+        "count": 2,
         "has_more": False,
     }
 
@@ -20988,9 +21012,9 @@ def test_get_search_data_query_param(app, client_api, users, db_userprofile, db_
     assert res.status_code == 200
     assert json.loads(res.data) == {
         "error": "",
-        "results": ["contributor"],
+        "results": ["comadmin"],
         "query": "",
-        "count": 4,
+        "count": 7,
         "has_more": True,
     }
 
@@ -21124,7 +21148,8 @@ def test_validate_users_info_login(client_api, users, db_userprofile, mocker):
     assert json.loads(res.data) == {"results": [
             {"info":{"email": users[0]["email"], "user_id":users[0]["id"], "username": "contributor"}, "validation": True, "error":''},
             {"info":{"email": users[1]["email"], "user_id":users[1]["id"], "username": "repoadmin"}, "validation": True, "error":''},
-            {"info":{"email": users[2]["email"], "user_id":users[2]["id"], "username": "sysadmin"}, "validation": True, "error":''}
+            # sysadmin (System Administrator) is now the excluded role
+            {"error": "Not Found Email", "info": None, "validation": False}
             ]}
 
     # username:存在しない値 "email":存在しない値
@@ -21140,7 +21165,8 @@ def test_validate_users_info_login(client_api, users, db_userprofile, mocker):
     )
     assert res1.status_code == 200
     assert json.loads(res1.data) == {"results": [
-            {"error":"Not Found Email", "info": None, "validation": False},
+            # comadmin (Community Administrator) is no longer excluded
+            {"info":{"email": users[3]["email"], "user_id":users[3]["id"], "username": "comadmin"}, "validation": True, "error":''},
             {"error":"Not Found Email", "info": None, "validation": False},
             {"error":"Not Found Username", "info": None, "validation": False},
             {"error":'User is not exist UserProfile',"info": '', "validation": False}
@@ -21994,11 +22020,18 @@ def test_get_userinfo_by_emails(
     login_user_via_session(client=client_api, email=users_1[0]["email"])
 
     url = url_for(
-        "weko_items_ui_api.get_userinfo_by_emails", emails=[users_1[0]["email"],users_1[1]["email"]], _external=True
+        "weko_items_ui_api.get_userinfo_by_emails", emails=[users_1[1]["email"]], _external=True
     )
     res = client_api.get(url)
-    assert res.json == [{'user_id': 1, 'username' :'wekosoftware', 'email':'wekosoftware@ivis.co.jp'},
-                        {'user_id': 2, 'username' :'repoadmin', 'email':'repoadmin@example.org'}]
+    assert res.json == [{'user_id': 2, 'username' :'repoadmin', 'email':'repoadmin@example.org'}]
+
+    # sysadmin (System Administrator) is excluded from shared-user candidates
+    url = url_for(
+        "weko_items_ui_api.get_userinfo_by_emails", emails=[users_1[0]["email"]], _external=True
+    )
+    with pytest.raises(ConnectionError) as e:
+        res = client_api.get(url)
+        assert str(e.value) == 'wrong email or Cannot connect to server!'
 
     # 存在しないメールアドレス
     url = url_for(

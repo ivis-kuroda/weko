@@ -91,6 +91,7 @@ from weko_items_ui.utils import (
     hide_thumbnail,
     is_need_to_show_agreement_page,
     is_schema_include_key,
+    is_shared_user_role_allowed,
     isExistKeyInDict,
     make_bibtex_data,
     make_stats_file,
@@ -161,25 +162,29 @@ def test_escape_like():
 # def search_username(prefix, limit=None):
 # .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_search_username -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
 def test_search_username(app, client, users, db_userprofile):
-    # empty prefix matches every eligible user, ordered by email ascending
+    # empty prefix matches every user except System Administrator, ordered
+    # by email ascending
     assert search_username("") == {
         "query": "",
-        "results": ["contributor", "originalroleuser2", "repoadmin", "sysadmin"],
-        "count": 4,
+        "results": [
+            "comadmin", "contributor", "generaluser", "originalroleuser2",
+            "originalroleuser", "repoadmin", "user",
+        ],
+        "count": 7,
         "has_more": False,
     }
 
     # prefix matching is case-insensitive
-    assert search_username("sys") == {
-        "query": "sys",
-        "results": ["sysadmin"],
-        "count": 1,
+    assert search_username("orig") == {
+        "query": "orig",
+        "results": ["originalroleuser2", "originalroleuser"],
+        "count": 2,
         "has_more": False,
     }
-    assert search_username("SYS") == {
-        "query": "SYS",
-        "results": ["sysadmin"],
-        "count": 1,
+    assert search_username("ORIG") == {
+        "query": "ORIG",
+        "results": ["originalroleuser2", "originalroleuser"],
+        "count": 2,
         "has_more": False,
     }
 
@@ -191,23 +196,28 @@ def test_search_username(app, client, users, db_userprofile):
         "has_more": False,
     }
 
-    # comadmin/generaluser/originalroleuser/user hold no target role and never appear
-    for excluded in ("comadmin", "generaluser", "originalroleuser", "user"):
-        assert excluded not in search_username("")["results"]
+    # only System Administrator is excluded; users holding any other role
+    # (or no role at all) are included
+    assert "sysadmin" not in search_username("")["results"]
+    for included in ("comadmin", "generaluser", "originalroleuser", "user"):
+        assert included in search_username("")["results"]
 
     # limit truncates results but count/has_more reflect the full match set
     assert search_username("", limit=1) == {
         "query": "",
-        "results": ["contributor"],
-        "count": 4,
+        "results": ["comadmin"],
+        "count": 7,
         "has_more": True,
     }
 
     # a negative limit disables the limit entirely
     assert search_username("", limit=-1) == {
         "query": "",
-        "results": ["contributor", "originalroleuser2", "repoadmin", "sysadmin"],
-        "count": 4,
+        "results": [
+            "comadmin", "contributor", "generaluser", "originalroleuser2",
+            "originalroleuser", "repoadmin", "user",
+        ],
+        "count": 7,
         "has_more": False,
     }
 
@@ -215,9 +225,9 @@ def test_search_username(app, client, users, db_userprofile):
 def test_search_username_config_limit(app, client, users, db_userprofile):
     app.config["WEKO_ITEMS_UI_CONTRIBUTOR_SUGGEST_LIMIT"] = 2
     result = search_username("")
-    assert result["count"] == 4
+    assert result["count"] == 7
     assert result["has_more"] is True
-    assert result["results"] == ["contributor", "originalroleuser2"]
+    assert result["results"] == ["comadmin", "contributor"]
 
 # def search_email(prefix, limit=None):
 # .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_search_email -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
@@ -225,19 +235,22 @@ def test_search_email(app, client, users, db_userprofile):
     assert search_email("") == {
         "query": "",
         "results": [
+            "comadmin@test.org",
             "contributor@test.org",
+            "generaluser@test.org",
             "originalroleuser2@test.org",
+            "originalroleuser@test.org",
             "repoadmin@test.org",
-            "sysadmin@test.org",
+            "user@test.org",
         ],
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
 
-    assert search_email("sys") == {
-        "query": "sys",
-        "results": ["sysadmin@test.org"],
-        "count": 1,
+    assert search_email("orig") == {
+        "query": "orig",
+        "results": ["originalroleuser2@test.org", "originalroleuser@test.org"],
+        "count": 2,
         "has_more": False,
     }
 
@@ -248,30 +261,34 @@ def test_search_email(app, client, users, db_userprofile):
         "has_more": False,
     }
 
-    for excluded in (
+    assert "sysadmin@test.org" not in search_email("")["results"]
+    for included in (
         "comadmin@test.org",
         "generaluser@test.org",
         "originalroleuser@test.org",
         "user@test.org",
     ):
-        assert excluded not in search_email("")["results"]
+        assert included in search_email("")["results"]
 
     assert search_email("", limit=1) == {
         "query": "",
-        "results": ["contributor@test.org"],
-        "count": 4,
+        "results": ["comadmin@test.org"],
+        "count": 7,
         "has_more": True,
     }
 
     assert search_email("", limit=-1) == {
         "query": "",
         "results": [
+            "comadmin@test.org",
             "contributor@test.org",
+            "generaluser@test.org",
             "originalroleuser2@test.org",
+            "originalroleuser@test.org",
             "repoadmin@test.org",
-            "sysadmin@test.org",
+            "user@test.org",
         ],
-        "count": 4,
+        "count": 7,
         "has_more": False,
     }
 
@@ -287,10 +304,20 @@ def test_get_shared_user_info_by_username(users, db_userprofile):
         "email": users[0]["email"],
     }
 
-    # comadmin (role_id=4) does not satisfy the shared-user role condition
-    # (WEKO_ITEMS_UI_SHARED_USER_ROLE_ID_LIST=[1,2,3])
+    # comadmin (Community Administrator) is not excluded (only System
+    # Administrator is), so it now satisfies the shared-user role condition
     assert get_shared_user_info_by_username(
         db_userprofile[users[3]["email"]].get_username
+    ) == {
+        "username": db_userprofile[users[3]["email"]].get_username,
+        "user_id": users[3]["id"],
+        "email": users[3]["email"],
+    }
+
+    # sysadmin (System Administrator) does not satisfy the shared-user role
+    # condition (WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST)
+    assert get_shared_user_info_by_username(
+        db_userprofile[users[2]["email"]].get_username
     ) is None
 
     # no user matches this username
@@ -309,9 +336,17 @@ def test_get_shared_user_info_by_email(users, db_userprofile):
         "email": users[0]["email"],
     }
 
-    # comadmin (role_id=4) does not satisfy the shared-user role condition
-    # (WEKO_ITEMS_UI_SHARED_USER_ROLE_ID_LIST=[1,2,3])
-    assert get_shared_user_info_by_email(users[3]["email"]) is None
+    # comadmin (Community Administrator) is not excluded (only System
+    # Administrator is), so it now satisfies the shared-user role condition
+    assert get_shared_user_info_by_email(users[3]["email"]) == {
+        "username": db_userprofile[users[3]["email"]].get_username,
+        "user_id": users[3]["id"],
+        "email": users[3]["email"],
+    }
+
+    # sysadmin (System Administrator) does not satisfy the shared-user role
+    # condition (WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST)
+    assert get_shared_user_info_by_email(users[2]["email"]) is None
 
     # no user matches this email
     assert get_shared_user_info_by_email("hogehoge@test.org") is None
@@ -337,10 +372,24 @@ def test_validate_shared_user(users, db_userprofile):
         db_userprofile[users[0]["email"]].get_username, users[1]["email"]
     )=={'results': '', 'validation': False, 'error': ''}
 
-    # comadmin (role_id=4) does not satisfy the shared-user role condition
-    # (WEKO_ITEMS_UI_SHARED_USER_ROLE_ID_LIST=[1,2,3])
+    # comadmin (Community Administrator) is not excluded (only System
+    # Administrator is), so it now satisfies the shared-user role condition
     assert validate_shared_user(
         db_userprofile[users[3]["email"]].get_username, users[3]["email"]
+    ) == {
+        "results": {
+            "username": db_userprofile[users[3]["email"]].get_username,
+            "user_id": users[3]["id"],
+            "email": users[3]["email"],
+        },
+        "validation": True,
+        "error": "",
+    }
+
+    # sysadmin (System Administrator) does not satisfy the shared-user role
+    # condition (WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST)
+    assert validate_shared_user(
+        db_userprofile[users[2]["email"]].get_username, users[2]["email"]
     ) == {'results': '', 'validation': False, 'error': ''}
 
     ret = validate_shared_user("sampleuser","repoadmin@test.org")
@@ -353,6 +402,25 @@ def test_validate_shared_user_nodb(app):
         ret = validate_shared_user("repoadmin@test.org","repoadmin@test.org")
         assert ret['error']
         assert ret['validation'] == False
+
+# def is_shared_user_role_allowed(user_id):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_is_shared_user_role_allowed -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_is_shared_user_role_allowed(app, users):
+    # contributor/repoadmin/comadmin/generaluser/originalroleuser/user are
+    # all allowed; only System Administrator is excluded
+    assert is_shared_user_role_allowed(users[0]["id"]) is True  # contributor
+    assert is_shared_user_role_allowed(users[1]["id"]) is True  # repoadmin
+    assert is_shared_user_role_allowed(users[2]["id"]) is False  # sysadmin
+    assert is_shared_user_role_allowed(users[3]["id"]) is True  # comadmin
+    assert is_shared_user_role_allowed(users[4]["id"]) is True  # generaluser
+    assert is_shared_user_role_allowed(users[7]["id"]) is True  # user (no role)
+
+    # a nonexistent user id is not allowed
+    assert is_shared_user_role_allowed(-1) is False
+
+    # an empty excluded-role list excludes no one
+    app.config["WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST"] = []
+    assert is_shared_user_role_allowed(users[2]["id"]) is True
 
 # def get_user_info_by_email(email):
 # .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_user_info_by_email -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
