@@ -21036,8 +21036,6 @@ def test_validate_user_info_guest(client_api, users):
 def test_validate_users_info_login(client_api, users, db_userprofile, mocker):
     login_user_via_session(client=client_api, email=users[2]["email"])
 
-    mocker.patch("weko_items_ui.utils.check_display_shared_user", return_value=True)
-
     res = client_api.post(
         "/api/items/validate_users_info",
         data=json.dumps(
@@ -21067,7 +21065,7 @@ def test_validate_users_info_login(client_api, users, db_userprofile, mocker):
     )
     assert res1.status_code == 200
     assert json.loads(res1.data) == {"results": [
-            {"error":'', "info":{'email':users[3]["email"],'user_id':users[3]["id"],'username':'comadmin'},"validation": True},
+            {"error":"Not Found Email", "info": None, "validation": False},
             {"error":"Not Found Email", "info": None, "validation": False},
             {"error":"Not Found Username", "info": None, "validation": False},
             {"error":'User is not exist UserProfile',"info": '', "validation": False}
@@ -21919,8 +21917,6 @@ def test_get_userinfo_by_emails(
 ):
     # admin
     login_user_via_session(client=client_api, email=users_1[0]["email"])
-
-    mocker.patch("weko_items_ui.utils.check_display_shared_user", return_value=True)
 
     url = url_for(
         "weko_items_ui_api.get_userinfo_by_emails", emails=[users_1[0]["email"],users_1[1]["email"]], _external=True

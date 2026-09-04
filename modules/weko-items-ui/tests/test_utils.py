@@ -78,9 +78,10 @@ from weko_items_ui.utils import (
     get_options_list,
     WekoQueryRankingHelper,
     get_ranking,
+    get_shared_user_info_by_email,
+    get_shared_user_info_by_username,
     get_title_in_request,
     get_user_info_by_email,
-    get_user_info_by_username,
     get_user_information,
     get_user_permission,
     get_workflow_by_item_type_id,
@@ -121,7 +122,7 @@ from weko_items_ui.utils import (
     update_sub_items_by_user_role,
     validate_bibtex,
     validate_form_input_data,
-    validate_user,
+    validate_shared_user,
     validate_user_mail,
     validate_user_mail_and_index,
     write_bibtex_files,
@@ -170,10 +171,10 @@ def test_get_list_email(app, client, users, db_userprofile):
     ]
 
 
-# def get_user_info_by_username(username):
-# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_user_info_by_username -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
-def test_get_user_info_by_username(users, db_userprofile):
-    assert get_user_info_by_username(
+# def get_shared_user_info_by_username(username):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_shared_user_info_by_username -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_get_shared_user_info_by_username(users, db_userprofile):
+    assert get_shared_user_info_by_username(
         db_userprofile[users[0]["email"]].get_username
     ) == {
         "username": db_userprofile[users[0]["email"]].get_username,
@@ -181,18 +182,42 @@ def test_get_user_info_by_username(users, db_userprofile):
         "email": users[0]["email"],
     }
 
-    with patch("weko_items_ui.utils.check_display_shared_user", return_value=False):
-        username = db_userprofile[users[0]["email"]].get_username
-        assert get_user_info_by_username(username)==None
+    # comadmin (role_id=4) does not satisfy the shared-user role condition
+    # (WEKO_ITEMS_UI_SHARED_USER_ROLE_ID_LIST=[1,2,3])
+    assert get_shared_user_info_by_username(
+        db_userprofile[users[3]["email"]].get_username
+    ) is None
 
-    with patch("weko_items_ui.utils.check_display_shared_user", side_effect=Exception('test error')):
+    # no user matches this username
+    assert get_shared_user_info_by_username("no_such_user") is None
+
+    with patch("weko_items_ui.utils.filter_shared_user_role", side_effect=Exception('test error')):
         username = db_userprofile[users[1]["email"]].get_username
-        assert get_user_info_by_username(username) == None
+        assert get_shared_user_info_by_username(username) is None
 
-# def validate_user(username, email):
-# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_validate_user -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
-def test_validate_user(users, db_userprofile):
-    assert validate_user(
+# def get_shared_user_info_by_email(email):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_shared_user_info_by_email -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_get_shared_user_info_by_email(users, db_userprofile):
+    assert get_shared_user_info_by_email(users[0]["email"]) == {
+        "username": db_userprofile[users[0]["email"]].get_username,
+        "user_id": users[0]["id"],
+        "email": users[0]["email"],
+    }
+
+    # comadmin (role_id=4) does not satisfy the shared-user role condition
+    # (WEKO_ITEMS_UI_SHARED_USER_ROLE_ID_LIST=[1,2,3])
+    assert get_shared_user_info_by_email(users[3]["email"]) is None
+
+    # no user matches this email
+    assert get_shared_user_info_by_email("hogehoge@test.org") is None
+
+    with patch("weko_items_ui.utils.filter_shared_user_role", side_effect=Exception('test error')):
+        assert get_shared_user_info_by_email(users[1]["email"]) is None
+
+# def validate_shared_user(username, email):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_validate_shared_user -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_validate_shared_user(users, db_userprofile):
+    assert validate_shared_user(
         db_userprofile[users[0]["email"]].get_username, users[0]["email"]
     ) == {
         "results": {
@@ -203,18 +228,24 @@ def test_validate_user(users, db_userprofile):
         "validation": True,
         "error": "",
     }
-    assert validate_user(
+    assert validate_shared_user(
         db_userprofile[users[0]["email"]].get_username, users[1]["email"]
     )=={'results': '', 'validation': False, 'error': ''}
 
-    ret = validate_user("sampleuser","repoadmin@test.org")
+    # comadmin (role_id=4) does not satisfy the shared-user role condition
+    # (WEKO_ITEMS_UI_SHARED_USER_ROLE_ID_LIST=[1,2,3])
+    assert validate_shared_user(
+        db_userprofile[users[3]["email"]].get_username, users[3]["email"]
+    ) == {'results': '', 'validation': False, 'error': ''}
+
+    ret = validate_shared_user("sampleuser","repoadmin@test.org")
     assert ret['error'] == 'User is not exist UserProfile'
     assert ret['validation'] == False
 
-# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_validate_user_nodb -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
-def test_validate_user_nodb(app):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_validate_shared_user_nodb -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_validate_shared_user_nodb(app):
     with app.test_request_context():
-        ret = validate_user("repoadmin@test.org","repoadmin@test.org")
+        ret = validate_shared_user("repoadmin@test.org","repoadmin@test.org")
         assert ret['error']
         assert ret['validation'] == False
 
