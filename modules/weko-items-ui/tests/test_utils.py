@@ -42,6 +42,7 @@ from weko_workflow.models import (
 from weko_items_ui.utils import (
     __sanitize_string,
     _custom_export_metadata,
+    _escape_like,
     _export_item,
     _get_max_export_items,
     check_approval_email,
@@ -68,9 +69,7 @@ from weko_items_ui.utils import (
     get_ignore_item_from_mapping,
     get_item_from_option,
     get_key_title_in_item_type_mapping,
-    get_list_email,
     get_list_file_by_record_id,
-    get_list_username,
     get_mapping_name_item_type_by_key,
     get_mapping_name_item_type_by_sub_key,
     get_new_items_by_date,
@@ -108,6 +107,8 @@ from weko_items_ui.utils import (
     remove_excluded_items_in_json_schema,
     sanitize_input_data,
     save_title,
+    search_email,
+    search_username,
     set_multi_language_name,
     set_validation_message,
     to_files_js,
@@ -150,25 +151,129 @@ def test_check_display_shared_user(app, client, users, db_userprofile):
     #generaluser users[4]
     assert False == check_display_shared_user(users[4]["id"])
 
-# def get_list_username():
-#  .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_list_username -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
-def test_get_list_username(app, client, users, db_userprofile):
-    assert get_list_username() == [
-        "contributor",
-        "originalroleuser2",
-        "repoadmin",
-        "sysadmin",
-    ]
+# def _escape_like(value):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_escape_like -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_escape_like():
+    assert _escape_like("abc") == "abc"
+    assert _escape_like("50%_off") == "50\\%\\_off"
+    assert _escape_like("back\\slash") == "back\\\\slash"
 
-# def get_list_email():
-#  .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_list_email -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
-def test_get_list_email(app, client, users, db_userprofile):
-    assert get_list_email() == [
-        "contributor@test.org",
-        "originalroleuser2@test.org",
-        "repoadmin@test.org",
-        "sysadmin@test.org",
-    ]
+# def search_username(prefix, limit=None):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_search_username -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_search_username(app, client, users, db_userprofile):
+    # empty prefix matches every eligible user, ordered by email ascending
+    assert search_username("") == {
+        "query": "",
+        "results": ["contributor", "originalroleuser2", "repoadmin", "sysadmin"],
+        "count": 4,
+        "has_more": False,
+    }
+
+    # prefix matching is case-insensitive
+    assert search_username("sys") == {
+        "query": "sys",
+        "results": ["sysadmin"],
+        "count": 1,
+        "has_more": False,
+    }
+    assert search_username("SYS") == {
+        "query": "SYS",
+        "results": ["sysadmin"],
+        "count": 1,
+        "has_more": False,
+    }
+
+    # no match
+    assert search_username("nosuchuser") == {
+        "query": "nosuchuser",
+        "results": [],
+        "count": 0,
+        "has_more": False,
+    }
+
+    # comadmin/generaluser/originalroleuser/user hold no target role and never appear
+    for excluded in ("comadmin", "generaluser", "originalroleuser", "user"):
+        assert excluded not in search_username("")["results"]
+
+    # limit truncates results but count/has_more reflect the full match set
+    assert search_username("", limit=1) == {
+        "query": "",
+        "results": ["contributor"],
+        "count": 4,
+        "has_more": True,
+    }
+
+    # a negative limit disables the limit entirely
+    assert search_username("", limit=-1) == {
+        "query": "",
+        "results": ["contributor", "originalroleuser2", "repoadmin", "sysadmin"],
+        "count": 4,
+        "has_more": False,
+    }
+
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_search_username_config_limit -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_search_username_config_limit(app, client, users, db_userprofile):
+    app.config["WEKO_ITEMS_UI_CONTRIBUTOR_SUGGEST_LIMIT"] = 2
+    result = search_username("")
+    assert result["count"] == 4
+    assert result["has_more"] is True
+    assert result["results"] == ["contributor", "originalroleuser2"]
+
+# def search_email(prefix, limit=None):
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_search_email -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_search_email(app, client, users, db_userprofile):
+    assert search_email("") == {
+        "query": "",
+        "results": [
+            "contributor@test.org",
+            "originalroleuser2@test.org",
+            "repoadmin@test.org",
+            "sysadmin@test.org",
+        ],
+        "count": 4,
+        "has_more": False,
+    }
+
+    assert search_email("sys") == {
+        "query": "sys",
+        "results": ["sysadmin@test.org"],
+        "count": 1,
+        "has_more": False,
+    }
+
+    assert search_email("nosuchuser") == {
+        "query": "nosuchuser",
+        "results": [],
+        "count": 0,
+        "has_more": False,
+    }
+
+    for excluded in (
+        "comadmin@test.org",
+        "generaluser@test.org",
+        "originalroleuser@test.org",
+        "user@test.org",
+    ):
+        assert excluded not in search_email("")["results"]
+
+    assert search_email("", limit=1) == {
+        "query": "",
+        "results": ["contributor@test.org"],
+        "count": 4,
+        "has_more": True,
+    }
+
+    assert search_email("", limit=-1) == {
+        "query": "",
+        "results": [
+            "contributor@test.org",
+            "originalroleuser2@test.org",
+            "repoadmin@test.org",
+            "sysadmin@test.org",
+        ],
+        "count": 4,
+        "has_more": False,
+    }
 
 
 # def get_shared_user_info_by_username(username):

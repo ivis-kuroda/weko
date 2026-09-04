@@ -20784,6 +20784,9 @@ def test_get_search_data_acl_user0(client_api, users, db_userprofile, db_session
             "repoadmin",
             "sysadmin",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
     url = url_for(
         "weko_items_ui_api.get_search_data", data_type="email", _external=True
@@ -20798,6 +20801,9 @@ def test_get_search_data_acl_user0(client_api, users, db_userprofile, db_session
             "repoadmin@test.org",
             "sysadmin@test.org",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
 
     url = url_for("weko_items_ui_api.get_search_data", data_type="hoge", _external=True)
@@ -20822,6 +20828,9 @@ def test_get_search_data_acl_user1(client_api, users, db_userprofile, db_session
             "repoadmin",
             "sysadmin",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
     url = url_for(
         "weko_items_ui_api.get_search_data", data_type="email", _external=True
@@ -20836,6 +20845,9 @@ def test_get_search_data_acl_user1(client_api, users, db_userprofile, db_session
             "repoadmin@test.org",
             "sysadmin@test.org",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
 
     url = url_for("weko_items_ui_api.get_search_data", data_type="hoge", _external=True)
@@ -20860,6 +20872,9 @@ def test_get_search_data_acl_user2(client_api, users, db_userprofile, db_session
             "repoadmin",
             "sysadmin",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
     url = url_for(
         "weko_items_ui_api.get_search_data", data_type="email", _external=True
@@ -20874,6 +20889,9 @@ def test_get_search_data_acl_user2(client_api, users, db_userprofile, db_session
             "repoadmin@test.org",
             "sysadmin@test.org",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
 
     url = url_for("weko_items_ui_api.get_search_data", data_type="hoge", _external=True)
@@ -20898,6 +20916,9 @@ def test_get_search_data_acl_user3(client_api, users, db_userprofile, db_session
             "repoadmin",
             "sysadmin",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
     url = url_for(
         "weko_items_ui_api.get_search_data", data_type="email", _external=True
@@ -20912,12 +20933,66 @@ def test_get_search_data_acl_user3(client_api, users, db_userprofile, db_session
             "repoadmin@test.org",
             "sysadmin@test.org",
         ],
+        "query": "",
+        "count": 4,
+        "has_more": False,
     }
 
     url = url_for("weko_items_ui_api.get_search_data", data_type="hoge", _external=True)
     res = client_api.get(url)
     assert res.status_code == 200
     assert json.loads(res.data) == {"error": "Invaid method", "results": ""}
+
+
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_views.py::test_get_search_data_query_param -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_get_search_data_query_param(app, client_api, users, db_userprofile, db_sessionlifetime):
+    login_user_via_session(client=client_api, email=users[0]["email"])
+
+    # the q parameter narrows the candidates down to a prefix match
+    url = url_for(
+        "weko_items_ui_api.get_search_data", data_type="username", q="sys",
+        _external=True,
+    )
+    res = client_api.get(url)
+    assert res.status_code == 200
+    assert json.loads(res.data) == {
+        "error": "",
+        "results": ["sysadmin"],
+        "query": "sys",
+        "count": 1,
+        "has_more": False,
+    }
+
+    # a prefix matching no one returns an empty result set
+    url = url_for(
+        "weko_items_ui_api.get_search_data", data_type="email", q="nosuchuser",
+        _external=True,
+    )
+    res = client_api.get(url)
+    assert res.status_code == 200
+    assert json.loads(res.data) == {
+        "error": "",
+        "results": [],
+        "query": "nosuchuser",
+        "count": 0,
+        "has_more": False,
+    }
+
+    # has_more/count reflect the total match count, independent of the limit
+    app.config["WEKO_ITEMS_UI_CONTRIBUTOR_SUGGEST_LIMIT"] = 1
+    url = url_for(
+        "weko_items_ui_api.get_search_data", data_type="username", q="",
+        _external=True,
+    )
+    res = client_api.get(url)
+    assert res.status_code == 200
+    assert json.loads(res.data) == {
+        "error": "",
+        "results": ["contributor"],
+        "query": "",
+        "count": 4,
+        "has_more": True,
+    }
 
 
 # .tox/c1/bin/pytest --cov=weko_items_ui tests/test_views.py::test_get_search_data_acl_user4 -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
