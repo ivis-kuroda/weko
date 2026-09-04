@@ -20780,9 +20780,9 @@ def test_get_search_data_acl_user0(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor",
+            "originalroleuser2",
             "repoadmin",
             "sysadmin",
-            "originalroleuser2",
         ],
     }
     url = url_for(
@@ -20794,9 +20794,9 @@ def test_get_search_data_acl_user0(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor@test.org",
+            "originalroleuser2@test.org",
             "repoadmin@test.org",
             "sysadmin@test.org",
-            "originalroleuser2@test.org",
         ],
     }
 
@@ -20818,9 +20818,9 @@ def test_get_search_data_acl_user1(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor",
+            "originalroleuser2",
             "repoadmin",
             "sysadmin",
-            "originalroleuser2",
         ],
     }
     url = url_for(
@@ -20832,9 +20832,9 @@ def test_get_search_data_acl_user1(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor@test.org",
+            "originalroleuser2@test.org",
             "repoadmin@test.org",
             "sysadmin@test.org",
-            "originalroleuser2@test.org",
         ],
     }
 
@@ -20856,9 +20856,9 @@ def test_get_search_data_acl_user2(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor",
+            "originalroleuser2",
             "repoadmin",
             "sysadmin",
-            "originalroleuser2",
         ],
     }
     url = url_for(
@@ -20870,9 +20870,9 @@ def test_get_search_data_acl_user2(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor@test.org",
+            "originalroleuser2@test.org",
             "repoadmin@test.org",
             "sysadmin@test.org",
-            "originalroleuser2@test.org",
         ],
     }
 
@@ -20894,9 +20894,9 @@ def test_get_search_data_acl_user3(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor",
+            "originalroleuser2",
             "repoadmin",
             "sysadmin",
-            "originalroleuser2",
         ],
     }
     url = url_for(
@@ -20908,9 +20908,9 @@ def test_get_search_data_acl_user3(client_api, users, db_userprofile, db_session
         "error": "",
         "results": [
             "contributor@test.org",
+            "originalroleuser2@test.org",
             "repoadmin@test.org",
             "sysadmin@test.org",
-            "originalroleuser2@test.org",
         ],
     }
 

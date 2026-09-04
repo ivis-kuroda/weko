@@ -153,29 +153,20 @@ def test_check_display_shared_user(app, client, users, db_userprofile):
 #  .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_list_username -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
 def test_get_list_username(app, client, users, db_userprofile):
     assert get_list_username() == [
-        #"user",
         "contributor",
-        #"comadmin",
+        "originalroleuser2",
         "repoadmin",
         "sysadmin",
-        #"generaluser",
-        #"originalroleuser",
-        "originalroleuser2",
     ]
-    # 5,4,2
 
 # def get_list_email():
 #  .tox/c1/bin/pytest --cov=weko_items_ui tests/test_utils.py::test_get_list_email -v --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
 def test_get_list_email(app, client, users, db_userprofile):
     assert get_list_email() == [
-        #"user@test.org",
         "contributor@test.org",
-        #"comadmin@test.org",
+        "originalroleuser2@test.org",
         "repoadmin@test.org",
         "sysadmin@test.org",
-        #"generaluser@test.org",
-        #"originalroleuser@test.org",
-        "originalroleuser2@test.org",
     ]
 
 
