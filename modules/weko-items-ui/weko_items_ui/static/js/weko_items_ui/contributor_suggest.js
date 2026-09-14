@@ -30,85 +30,103 @@ document.addEventListener("click", function (e) {
   closeAllLists(e.target);
 });
 
+var contributorSuggestFocus = new Map(); // inputId -> currentFocus (arrow-key selection index)
+
+function removeOwnAutocompleteList(inp) {
+  /*remove only this input's own autocomplete list (if any), leaving any
+  autocomplete list currently open on other inputs untouched:*/
+  var ownList = document.getElementById(inp.id + "autocomplete-list");
+  if (ownList) {
+    ownList.remove();
+  }
+}
+
+function renderAutocompleteList(inp) {
+  var arr = suggestState.get(inp.id) || [];
+  var form_share_other_user, autocomplete_scroll, droplist_show_other_user, i, val = inp.value;
+  var mode = inp.id;
+  var matchCount = 0;
+  removeOwnAutocompleteList(inp);
+  if (!val) {
+    return false;
+  }
+  contributorSuggestFocus.set(inp.id, -1);
+  form_share_other_user = document.createElement("div");
+  form_share_other_user.setAttribute("id", inp.id + "autocomplete-list");
+  form_share_other_user.setAttribute("class", "autocomplete-items");
+  inp.parentNode.appendChild(form_share_other_user);
+
+  autocomplete_scroll = document.createElement("div");
+  autocomplete_scroll.setAttribute("class", "autocomplete-scroll");
+  form_share_other_user.appendChild(autocomplete_scroll);
+
+  /*for each item in the array...*/
+  for (i = 0; i < arr.length; i++) {
+    /*check if the item starts with the same letters as the text field value:*/
+    if (arr[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
+      /*create a DIV element for each matching element:*/
+      droplist_show_other_user = document.createElement("div");
+      droplist_show_other_user.classList.add("autocomplete-suggest-item");
+      /*make the matching letters bold:*/
+      droplist_show_other_user.innerHTML = "<strong>" + arr[i].substr(0, val.length) + "</strong>";
+      droplist_show_other_user.innerHTML += arr[i].substr(val.length);
+      /*insert a input field that will hold the current array item's value:*/
+      droplist_show_other_user.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
+
+      /*execute a function when someone clicks on the item value (DIV element):*/
+      droplist_show_other_user.addEventListener('click', function (e) {
+        /*insert the value for the autocomplete text field:*/
+        inp.value = this.getElementsByTagName("input")[0].value;
+        if (mode.match('share_username')) {
+          filter.filter_username = inp.value;
+          // get exact user info contains username and email by username unique
+          get_autofill_data(filter.filter_username, "", mode);
+        } else if (mode.match('share_email')) {
+          filter.filter_email = inp.value;
+          // get exact user info contains username and email by email
+          get_autofill_data('', filter.filter_email, mode);
+        }
+        closeAllLists();
+      });
+
+      autocomplete_scroll.appendChild(droplist_show_other_user);
+      matchCount++;
+    }
+  }
+  if (matchCount === 0) {
+    if (autocomplete_scroll.children.length == 0) {
+      droplist_show_other_user = document.createElement("div");
+      droplist_show_other_user.classList.add("autocomplete-suggest-item");
+      droplist_show_other_user.innerHTML = "<p>No result found" + "</p>";
+      droplist_show_other_user.innerHTML += "<input type='hidden' value='No results found'>";
+      autocomplete_scroll.appendChild(droplist_show_other_user);
+    }
+  }
+
+  var suggest_cache = (typeof contributorSuggestCache !== "undefined") ? contributorSuggestCache[inp.id] : null;
+  if (suggest_cache) {
+    var autocomplete_count = document.createElement("div");
+    autocomplete_count.setAttribute("class", "autocomplete-count");
+    // Same condition scheduleSuggestSearch() uses to skip the server: when it
+    // holds, matchCount is the exact total; otherwise it is a lower bound.
+    autocomplete_count.textContent =
+      (suggest_cache.hasMore === false && val.indexOf(suggest_cache.query) === 0) ?
+        CONTRIBUTOR_SUGGEST_COUNT_LABEL.replace('{}', matchCount) :
+        CONTRIBUTOR_SUGGEST_COUNT_MORE_LABEL.replace('{}', matchCount);
+    form_share_other_user.appendChild(autocomplete_count);
+  }
+}
+
 function initAutocomplete(inp) {
   if (inp.dataset.autocompleteInit) return;
   inp.dataset.autocompleteInit = "true";
 
-  var currentFocus = -1;
-
   inp.addEventListener("input", function (e) {
-    var arr = suggestState.get(this.id) || [];
-    var form_share_other_user, autocomplete_scroll, droplist_show_other_user, i, val = this.value;
-    var mode = this.id;
-    var flag = false;
-    closeAllLists();
-    if (!val) {
-      return false;
-    }
-    currentFocus = -1;
-    form_share_other_user = document.createElement("div");
-    form_share_other_user.setAttribute("id", this.id + "autocomplete-list");
-    form_share_other_user.setAttribute("class", "autocomplete-items");
-    this.parentNode.appendChild(form_share_other_user);
-
-    autocomplete_scroll = document.createElement("div");
-    autocomplete_scroll.setAttribute("class", "autocomplete-scroll");
-    form_share_other_user.appendChild(autocomplete_scroll);
-
-    /*for each item in the array...*/
-    for (i = 0; i < arr.length; i++) {
-      /*check if the item starts with the same letters as the text field value:*/
-      if (arr[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
-        /*create a DIV element for each matching element:*/
-        droplist_show_other_user = document.createElement("div");
-        droplist_show_other_user.classList.add("autocomplete-suggest-item");
-        /*make the matching letters bold:*/
-        droplist_show_other_user.innerHTML = "<strong>" + arr[i].substr(0, val.length) + "</strong>";
-        droplist_show_other_user.innerHTML += arr[i].substr(val.length);
-        /*insert a input field that will hold the current array item's value:*/
-        droplist_show_other_user.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
-
-        /*execute a function when someone clicks on the item value (DIV element):*/
-        droplist_show_other_user.addEventListener('click', function (e) {
-          /*insert the value for the autocomplete text field:*/
-          inp.value = this.getElementsByTagName("input")[0].value;
-          if (mode.match('share_username')) {
-            filter.filter_username = inp.value;
-            // get exact user info contains username and email by username unique
-            get_autofill_data(filter.filter_username, "", mode);
-          } else if (mode.match('share_email')) {
-            filter.filter_email = inp.value;
-            // get exact user info contains username and email by email
-            get_autofill_data('', filter.filter_email, mode);
-          }
-          closeAllLists();
-        });
-
-        autocomplete_scroll.appendChild(droplist_show_other_user);
-        flag = true;
-      }
-    }
-    if (flag == false) {
-      if (autocomplete_scroll.children.length == 0) {
-        droplist_show_other_user = document.createElement("div");
-        droplist_show_other_user.classList.add("autocomplete-suggest-item");
-        droplist_show_other_user.innerHTML = "<p>No result found" + "</p>";
-        droplist_show_other_user.innerHTML += "<input type='hidden' value='No results found'>";
-        autocomplete_scroll.appendChild(droplist_show_other_user);
-      }
-    }
-
-    var suggest_cache = (typeof contributorSuggestCache !== "undefined") ? contributorSuggestCache[this.id] : null;
-    if (suggest_cache) {
-      var autocomplete_count = document.createElement("div");
-      autocomplete_count.setAttribute("class", "autocomplete-count");
-      autocomplete_count.textContent = suggest_cache.hasMore ?
-        CONTRIBUTOR_SUGGEST_COUNT_MORE_LABEL.replace('{}', suggest_cache.limit) :
-        CONTRIBUTOR_SUGGEST_COUNT_LABEL.replace('{}', suggest_cache.count);
-      form_share_other_user.appendChild(autocomplete_count);
-    }
+    closeAllLists(this);
+    renderAutocompleteList(this);
   });
   inp.addEventListener("keydown", function (e) {
+    var currentFocus = contributorSuggestFocus.has(this.id) ? contributorSuggestFocus.get(this.id) : -1;
     var x = document.getElementById(this.id + "autocomplete-list");
     if (x) {
       x = x.getElementsByClassName("autocomplete-suggest-item");
@@ -118,13 +136,13 @@ function initAutocomplete(inp) {
       increase the currentFocus variable:*/
       currentFocus++;
       /*and and make the current item more visible:*/
-      addActive(x);
+      currentFocus = addActive(x, currentFocus);
     } else if (e.keyCode == 38) { //up
       /*If the arrow UP key is pressed,
       decrease the currentFocus variable:*/
       currentFocus--;
       /*and and make the current item more visible:*/
-      addActive(x);
+      currentFocus = addActive(x, currentFocus);
     } else if (e.keyCode == 13) {
       /*If the ENTER key is pressed, prevent the form from being submitted,*/
       e.preventDefault();
@@ -142,23 +160,25 @@ function initAutocomplete(inp) {
         }
       }
     }
+    contributorSuggestFocus.set(this.id, currentFocus);
   });
-  function addActive(x) {
-    /*a function to classify an item as "active":*/
-    if (!x) return false;
-    /*start by removing the "active" class on all items:*/
-    removeActive(x);
-    if (currentFocus >= x.length) currentFocus = 0;
-    if (currentFocus < 0) currentFocus = (x.length - 1);
-    /*add class "autocomplete-active":*/
-    x[currentFocus].classList.add("autocomplete-active");
-    x[currentFocus].scrollIntoView({ block: "nearest" });
-  }
-  function removeActive(x) {
-    /*a function to remove the "active" class from all autocomplete items:*/
-    for (var i = 0; i < x.length; i++) {
-      x[i].classList.remove("autocomplete-active");
-    }
+}
+function addActive(x, currentFocus) {
+  /*a function to classify an item as "active"; returns the normalized currentFocus:*/
+  if (!x) return currentFocus;
+  /*start by removing the "active" class on all items:*/
+  removeActive(x);
+  if (currentFocus >= x.length) currentFocus = 0;
+  if (currentFocus < 0) currentFocus = (x.length - 1);
+  /*add class "autocomplete-active":*/
+  x[currentFocus].classList.add("autocomplete-active");
+  x[currentFocus].scrollIntoView({ block: "nearest" });
+  return currentFocus;
+}
+function removeActive(x) {
+  /*a function to remove the "active" class from all autocomplete items:*/
+  for (var i = 0; i < x.length; i++) {
+    x[i].classList.remove("autocomplete-active");
   }
 }
 
@@ -237,7 +257,11 @@ function fetchContributorSuggestions(keyword, inputId, query) {
         limit: data.results.length
       };
       updateSuggestState(inputId, data.results);
+      if (document.activeElement !== inputElement) return;
+      // initAutocomplete() only registers listeners once; safe to call
+      // again here to guarantee they exist before re-rendering.
       initAutocomplete(inputElement);
+      renderAutocompleteList(inputElement);
     },
     error: function (data, status) {
       $("#id_spinners_" + keyword + suffix).css("display", "none");

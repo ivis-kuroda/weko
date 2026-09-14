@@ -851,6 +851,7 @@ def get_search_data(data_type=''):
         else:
             result['error'] = 'Invaid method'
     except Exception as e:
+        traceback.print_exc()
         result['error'] = str(e)
 
     return jsonify(result)
