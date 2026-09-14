@@ -4,6 +4,9 @@ var filter = {
   filter_username: "",
   filter_email: ''
 }
+/**
+ * Map storing the candidate suggestion lists for each input element by its ID.
+ * @type {Map<string, Array<string>>} */
 const suggestState = new Map(); // inputId -> candidates array
 
 /**
@@ -67,9 +70,8 @@ function removeOwnAutocompleteList(inp) {
  */
 function renderAutocompleteList(inp) {
   var arr = suggestState.get(inp.id) || [];
-  var form_share_other_user, autocomplete_scroll, droplist_show_other_user, i, val = inp.value;
+  var form_share_other_user, autocomplete_scroll, val = inp.value;
   var mode = inp.id;
-  var matchCount = 0;
   removeOwnAutocompleteList(inp);
   if (!val) {
     return false;
@@ -84,47 +86,63 @@ function renderAutocompleteList(inp) {
   autocomplete_scroll.setAttribute("class", "autocomplete-scroll");
   form_share_other_user.appendChild(autocomplete_scroll);
 
-  // for each item in the array...
-  for (i = 0; i < arr.length; i++) {
-    // check if the item starts with the same letters as the text field value:
-    if (arr[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
-      // create a DIV element for each matching element:
-      droplist_show_other_user = document.createElement("div");
-      droplist_show_other_user.classList.add("autocomplete-suggest-item");
-      // make the matching letters bold:
-      droplist_show_other_user.innerHTML = "<strong>" + arr[i].substr(0, val.length) + "</strong>";
-      droplist_show_other_user.innerHTML += arr[i].substr(val.length);
-      // insert a input field that will hold the current array item's value:
-      droplist_show_other_user.innerHTML += "<input type='hidden' value='" + arr[i] + "'>";
+  // candidates that start with the same letters as the text field value:
+  var matches = arr.filter((candidate) =>
+    candidate.slice(0, val.length).toUpperCase() === val.toUpperCase()
+  );
 
-      // execute a function when someone clicks on the item value (DIV element):
-      droplist_show_other_user.addEventListener('click', function (e) {
-        // insert the value for the autocomplete text field:
-        inp.value = this.getElementsByTagName("input")[0].value;
-        if (mode.match('share_username')) {
-          filter.filter_username = inp.value;
-          // get exact user info contains username and email by username unique
-          get_autofill_data(filter.filter_username, "", mode);
-        } else if (mode.match('share_email')) {
-          filter.filter_email = inp.value;
-          // get exact user info contains username and email by email
-          get_autofill_data('', filter.filter_email, mode);
-        }
-        closeAllLists();
-      });
+  matches.forEach((candidate) => {
+    var item = document.createElement("div");
+    item.classList.add("autocomplete-suggest-item");
 
-      autocomplete_scroll.appendChild(droplist_show_other_user);
-      matchCount++;
-    }
-  }
+    // make the matching letters bold:
+    var strongEl = document.createElement("strong");
+    strongEl.textContent = candidate.slice(0, val.length);
+    item.appendChild(strongEl);
+    item.appendChild(document.createTextNode(candidate.slice(val.length)));
+
+    // hold the current candidate's value for the click handler below:
+    var hiddenInput = document.createElement("input");
+    hiddenInput.type = "hidden";
+    hiddenInput.value = candidate;
+    item.appendChild(hiddenInput);
+
+    // execute a function when someone clicks on the item value (DIV element);
+    // this must stay a regular function, since `this` needs to be the
+    // clicked element, not the lexical `this` an arrow function would use:
+    item.addEventListener('click', function (e) {
+      // insert the value for the autocomplete text field:
+      inp.value = this.getElementsByTagName("input")[0].value;
+      if (mode.match('share_username')) {
+        filter.filter_username = inp.value;
+        // get exact user info contains username and email by username unique
+        get_autofill_data(filter.filter_username, "", mode);
+      } else if (mode.match('share_email')) {
+        filter.filter_email = inp.value;
+        // get exact user info contains username and email by email
+        get_autofill_data('', filter.filter_email, mode);
+      }
+      closeAllLists();
+    });
+
+    autocomplete_scroll.appendChild(item);
+  });
+
+  var matchCount = matches.length;
   if (matchCount === 0) {
-    if (autocomplete_scroll.children.length == 0) {
-      droplist_show_other_user = document.createElement("div");
-      droplist_show_other_user.classList.add("autocomplete-suggest-item");
-      droplist_show_other_user.innerHTML = "<p>No result found" + "</p>";
-      droplist_show_other_user.innerHTML += "<input type='hidden' value='No results found'>";
-      autocomplete_scroll.appendChild(droplist_show_other_user);
-    }
+    var noResult = document.createElement("div");
+    noResult.classList.add("autocomplete-suggest-item");
+
+    var noResultText = document.createElement("p");
+    noResultText.textContent = "No result found";
+    noResult.appendChild(noResultText);
+
+    var noResultInput = document.createElement("input");
+    noResultInput.type = "hidden";
+    noResultInput.value = "No results found";
+    noResult.appendChild(noResultInput);
+
+    autocomplete_scroll.appendChild(noResult);
   }
 
   var suggest_cache = (typeof contributorSuggestCache !== "undefined") ? contributorSuggestCache[inp.id] : null;
@@ -165,19 +183,19 @@ function initAutocomplete(inp) {
     if (x) {
       x = x.getElementsByClassName("autocomplete-suggest-item");
     }
-    if (e.keyCode == 40) {
+    if (e.key === "ArrowDown") {
       /*If the arrow DOWN key is pressed,
       increase the currentFocus variable:*/
       currentFocus++;
       /*and and make the current item more visible:*/
       currentFocus = addActive(x, currentFocus);
-    } else if (e.keyCode == 38) { //up
+    } else if (e.key === "ArrowUp") {
       /*If the arrow UP key is pressed,
       decrease the currentFocus variable:*/
       currentFocus--;
       /*and and make the current item more visible:*/
       currentFocus = addActive(x, currentFocus);
-    } else if (e.keyCode == 13) {
+    } else if (e.key === "Enter") {
       /*If the ENTER key is pressed, prevent the form from being submitted,*/
       e.preventDefault();
       if (currentFocus > -1) {
@@ -243,9 +261,16 @@ function initContributorSuggest(inp) {
     scheduleSuggestSearch(inp);
   });
 }
-
+/**
+ * Timers for debouncing contributor suggestion lookups, keyed by input ID.
+ * @type {Object<string, number>}
+ */
 var contributorSuggestTimers = {};
-var contributorSuggestCache = {}; // inputId -> { query: string, hasMore: bool, count: number, limit: number }
+/**
+ * Cache for contributor suggestion results, keyed by input ID.
+ * @type {Object<string, { query: string, hasMore: boolean, count: number, limit: number }>}
+ */
+var contributorSuggestCache = {};
 
 /**
  * Debounce contributor suggestion lookups for the given input: clears any
