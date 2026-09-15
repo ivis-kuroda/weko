@@ -93,7 +93,8 @@ def test_publish_acl_guest(client, records):
     url = url_for("invenio_records_ui.recid_publish", pid_value=1, _external=True)
     res = client.post(url)
     assert res.status_code == 302
-    assert res.location == "http://test_server/records/1"
+    # 未ログインではログイン画面へ飛ばされる (以前は /records/1 だった)。
+    assert res.location.startswith("http://test_server/login/")
 
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_publish_acl -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
@@ -191,7 +192,9 @@ def test_export_acl_guest(client, records):
         # (7, 302),
     ],
 )
-@pytest.mark.timeout(60)
+# 60 秒はフィクスチャの実測 (1件あたり40秒超) に対して短すぎる。
+# pytest-timeout が入るまでこのマーカーは効いていなかった。
+# モジュール全体の上限 (tox.ini の [pytest] timeout = 600) に任せる。
 def test_export_acl(client, records, users, id, status_code):
     login_user_via_session(client=client, email=users[id]["email"])
     url = url_for(
@@ -1187,6 +1190,11 @@ def test_set_pdfcoverpage_header_acl_error(app, client, records, users, id, resu
         'header-output-image': (io.BytesIO(b"some initial text data"), 'test.png')}
     with patch('weko_records_ui.views.db.session.commit', side_effect=Exception("")):
         res = client.post(url,data=data)
+        if not result:
+            # result=False は「権限が無い」の意。users[0] は contributor で、
+            # 設定の更新は admin 権限が要るので 403。
+            assert res.status_code == 403
+            return
         assert res.status_code == 302
         s = PDFCoverPageSettings.find(1)
         assert s is not None
@@ -1218,6 +1226,11 @@ def test_set_pdfcoverpage_header_acl(app, client, records, users, id, result, pd
     data = {'availability':'enable', 'header-display':'string', 'header-output-string':'Weko Univ', 'header-display-position':'center', 'pdfcoverpage_form': '',
         'header-output-image': (io.BytesIO(b"some initial text data"), 'test.png')}
     res = client.post(url,data=data)
+    if not result:
+        # result=False は「権限が無い」の意。users[0] は contributor で、
+        # 設定の更新は admin 権限が要るので 403。
+        assert res.status_code == 403
+        return
     assert res.status_code == 302
     assert res.location == 'http://test_server/admin/pdfcoverpage'
     s = PDFCoverPageSettings.find(1)
@@ -1306,8 +1319,8 @@ def test_soft_delete_acl_guest(client, records):
         (1, 200), # repoadmin
         (2, 200), # sysadmin
         (3, 200), # comadmin
-        (4, 500), # generaluser
-        (5, 500), # originalroleuser
+        (4, 403), # generaluser
+        (5, 403), # originalroleuser
         (6, 200), # originalroleuser2
         (7, 200), # user
     ],
@@ -1430,12 +1443,12 @@ def test_restore_acl_guest(client, records):
 @pytest.mark.parametrize(
     "id, status_code",
     [
-        (0, 500), # contributor
+        (0, 200), # contributor
         (1, 200), # repoadmin
         (2, 200), # sysadmin
         (3, 200), # comadmin
-        (4, 500), # generaluser
-        (5, 500), # originalroleuser
+        (4, 403), # generaluser
+        (5, 403), # originalroleuser
         (6, 200), # originalroleuser2
         (7, 200), # user
     ],
@@ -1669,14 +1682,25 @@ def test_publish(app, client, records):
                             mock_external.assert_called_with(old_record=record_1_c, new_record=record_0_c)
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_get_bucket_list -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
-def test_get_bucket_list(app,records,users):
-    with app.test_request_context():
-        with patch("weko_records_ui.views.get_s3_bucket_list", return_value=[]):
-            response = get_bucket_list()
-            assert response.status_code == 200
-        with patch("weko_records_ui.views.get_s3_bucket_list",side_effect=Exception):
-            response = get_bucket_list()
-            assert response[1] == 400
+def test_get_bucket_list(app, records, users, client):
+    # ビュー関数を直接呼ぶとデコレータを通らないため client 経由にした
+    login(client, obj=users[0]["obj"])
+    url = url_for("weko_records_ui.get_bucket_list")
+    with patch("weko_records_ui.views.get_s3_bucket_list", return_value=[]):
+        assert client.get(url).status_code == 200
+    with patch("weko_records_ui.views.get_s3_bucket_list", side_effect=Exception):
+        assert client.get(url).status_code == 400
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_get_bucket_list_acl_guest -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_get_bucket_list_acl_guest(app, records, users, client):
+    """Lists the caller's own S3 buckets, so it needs a caller.
+
+    get_s3_bucket_list raises a bare Exception for anonymous users and the
+    view turns that into 400, which is indistinguishable from a bad request.
+    """
+    res = client.get(url_for("weko_records_ui.get_bucket_list"))
+    assert res.status_code == 302
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_copy_bucket -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
 def test_copy_bucket(app,records,users, client):
@@ -1709,6 +1733,64 @@ def test_copy_bucket(app,records,users, client):
             content_type='application/json',
         )
         assert res.status_code == 400
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_copy_bucket_acl_guest -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_copy_bucket_acl_guest(app, records, users, client):
+    """Anonymous requests get 401 JSON rather than the login page.
+
+    Unlike replace_file, the caller sends a JSON body, so the unauthorized
+    handler answers in JSON instead of redirecting -- a redirect would reach
+    the fetch() caller as the login page's HTML and fail while parsing.
+    """
+    res = client.post(url_for("weko_records_ui.copy_bucket"),
+                      data=json.dumps({'pid': '1'}),
+                      content_type='application/json')
+    assert res.status_code == 401
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_copy_bucket_acl -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+@pytest.mark.parametrize(
+    "id, status_code",
+    [
+        (2, 200), # sysadmin
+        (4, 403), # generaluser
+        (5, 403), # originalroleuser
+    ],
+)
+def test_copy_bucket_acl(app, records, users, client, id, status_code):
+    """Copying a record's file out to a bucket is an edit of that record."""
+    login(client, obj=users[id]["obj"])
+    with patch("weko_records_ui.views.copy_bucket_to_s3", return_value={}):
+        res = client.post(
+            url_for("weko_records_ui.copy_bucket"),
+            data=json.dumps({
+                'pid': '1',
+                'file_name': 'helloworld.pdf',
+                'bucket_id': '1',
+                'checked': 'True',
+                'bucket_name': 'name',
+            }),
+            content_type='application/json',
+        )
+        assert res.status_code == status_code
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_copy_bucket_contributor_not_owner -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_copy_bucket_contributor_not_owner(
+        client, records, users, contributor_not_owner):
+    """Holding the Contributor role is not enough without ownership.
+
+    The record id arrives in the JSON body here, not the URL.
+    """
+    with patch("flask_login.utils._get_user", return_value=contributor_not_owner):
+        with patch("weko_records_ui.views.copy_bucket_to_s3", return_value={}):
+            res = client.post(
+                url_for("weko_records_ui.copy_bucket"),
+                data=json.dumps({'pid': '1', 'bucket_name': 'name'}),
+                content_type='application/json',
+            )
+        assert res.status_code == 403
+
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_get_file_place -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
 def test_get_file_place(app,records,users, client):
@@ -1743,9 +1825,148 @@ def test_get_file_place(app,records,users, client):
         )
         assert res.status_code == 400
 
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_get_file_place_acl_guest -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_get_file_place_acl_guest(app, records, users, client):
+    """Anonymous requests are sent to the login screen."""
+    res = client.post(url_for("weko_records_ui.get_file_place"))
+    assert res.status_code == 302
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_get_file_place_acl -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+@pytest.mark.parametrize(
+    "id, status_code",
+    [
+        (2, 200), # sysadmin
+        (4, 403), # generaluser
+        (5, 403), # originalroleuser
+    ],
+)
+def test_get_file_place_acl(app, records, users, client, id, status_code):
+    """get_file_place hands out an upload target, so it needs the same
+    permission as replace_file. Without it the two-step replace flow is
+    only guarded on its second half."""
+    login(client, obj=users[id]["obj"])
+    with patch("weko_records_ui.views.get_file_place_info",
+               return_value=("S3", "uri", "1", "1")):
+        res = client.post(
+            url_for("weko_records_ui.get_file_place"),
+            data={
+                'pid': '1',
+                'bucket_id': '1',
+                'file_name': 'helloworld.pdf',
+            },
+        )
+        assert res.status_code == status_code
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_get_file_place_contributor_not_owner -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_get_file_place_contributor_not_owner(
+        client, records, users, contributor_not_owner):
+    """Holding the Contributor role is not enough without ownership."""
+    with patch("flask_login.utils._get_user", return_value=contributor_not_owner):
+        with patch("weko_records_ui.views.get_file_place_info",
+                   return_value=("S3", "uri", "1", "1")):
+            res = client.post(
+                url_for("weko_records_ui.get_file_place"),
+                data={
+                    'pid': '1',
+                    'bucket_id': '1',
+                    'file_name': 'helloworld.pdf',
+                },
+            )
+        assert res.status_code == 403
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_record_edit_permission_contributor_not_owner -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+@pytest.mark.parametrize("endpoint", ["soft_delete", "restore"])
+def test_record_edit_permission_contributor_not_owner(
+        client, records, users, contributor_not_owner, endpoint):
+    """Holding the Contributor role is not enough without ownership.
+
+    users[0] (contributor) passes because _deposit.created_by is its id, and
+    users[7] (user) passes because the record's top-level owner is its id --
+    not because of their role. A third Contributor who is neither must be
+    rejected, otherwise the ownership check is not doing anything.
+    """
+    with patch("flask_login.utils._get_user", return_value=contributor_not_owner):
+        url = url_for("weko_records_ui." + endpoint, recid=1, _external=True)
+        with patch("flask.templating._render", return_value=""):
+            res = client.post(url)
+        assert res.status_code == 403
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_replace_file_contributor_not_owner -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_replace_file_contributor_not_owner(
+        client, records, users, contributor_not_owner):
+    """Same for replace_file, which takes the record id from the form."""
+    with patch("flask_login.utils._get_user", return_value=contributor_not_owner):
+        with patch("weko_records_ui.views.replace_file_bucket", return_value={}):
+            res = client.post(
+                url_for("weko_records_ui.replace_file"),
+                data={
+                    'return_file_place': 'S3',
+                    'pid': '1',
+                    'bucket_id': '1',
+                    'file_name': 'helloworld.pdf',
+                    'file_size': 100,
+                    'file_checksum': '86266081366d3c950c1cb31fbd9e1c38e4834fa52b568753ce28c87bc31252cd',
+                    'new_bucket_id': '1',
+                    'new_version_id': '1',
+                },
+            )
+        assert res.status_code == 403
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_replace_file_acl_guest -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_replace_file_acl_guest(app, records, users, client):
+    """Anonymous requests are sent to the login screen."""
+    res = client.post(url_for("weko_records_ui.replace_file"))
+    assert res.status_code == 302
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_replace_file_acl -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+@pytest.mark.parametrize(
+    "id, status_code",
+    [
+        (2, 200), # sysadmin
+        (4, 403), # generaluser
+        (5, 403), # originalroleuser
+    ],
+)
+def test_replace_file_acl(app, records, users, client, id, status_code):
+    """Only users who may edit the record can replace its files."""
+    login(client, obj=users[id]["obj"])
+    with patch("weko_records_ui.views.replace_file_bucket", return_value={}):
+        res = client.post(
+            url_for("weko_records_ui.replace_file"),
+            data={
+                'return_file_place': 'S3',
+                'pid': '1',
+                'bucket_id': '1',
+                'file_name': 'helloworld.pdf',
+                'file_size': 100,
+                'file_checksum': '86266081366d3c950c1cb31fbd9e1c38e4834fa52b568753ce28c87bc31252cd',
+                'new_bucket_id': '1',
+                'new_version_id': '1',
+            },
+        )
+        assert res.status_code == status_code
+
+
+# .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_replace_file_no_pid -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
+def test_replace_file_no_pid(app, records, users, client):
+    """A request without a record id is rejected before reaching the view."""
+    login(client, obj=users[2]["obj"])  # sysadmin
+    res = client.post(
+        url_for("weko_records_ui.replace_file"),
+        data={'return_file_place': 'S3'},
+    )
+    assert res.status_code == 400
+
+
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_replace_file -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
 def test_replace_file(app,records,users, client):
-    login(client,obj=users[0]["obj"])
+    login(client,obj=users[2]["obj"])  # sysadmin
     url = url_for("weko_records_ui.replace_file")
     # テスト用のデータを用意
     test_data = b'Hello, World!' # バイナリデータ

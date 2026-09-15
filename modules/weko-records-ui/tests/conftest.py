@@ -171,6 +171,15 @@ def instance_path():
 @pytest.fixture()
 def base_app(instance_path):
     """Flask application fixture."""
+    # weko_records_ui/fonts/*/*.pkl は fpdf のフォントメトリクス
+    # キャッシュで、生成したときの **相対パス** が ttffile として
+    # 焼き込まれている
+    # (modules/weko-records-ui/weko_records_ui/fonts/.../ipaexg.ttf)。
+    # fpdf はこのキャッシュを読み、出力時にその ttffile を開くため、
+    # 作業ディレクトリが違うと FileNotFoundError になる。
+    # キャッシュを使わせない (0=同じフォルダ, 1=使わない)。
+    from fpdf import fpdf as _fpdf
+    _fpdf.FPDF_CACHE_MODE = 1
     app_ = Flask(
         "testapp",
         instance_path=instance_path,
@@ -259,9 +268,12 @@ def base_app(instance_path):
         PDF_COVERPAGE_LANG_FILENAME=PDF_COVERPAGE_LANG_FILENAME,
         # JPAEXG_TTF_FILEPATH=JPAEXG_TTF_FILEPATH,
         # JPAEXG_TTF_FILEPATH = "/code/modules/weko-records-ui/weko_records_ui/fonts/ipaexg00201/ipaexg.ttf",
-        JPAEXG_TTF_FILEPATH="tests/fonts/ipaexg.ttf",
+        # pdf.py は blueprint.root_path (= weko_records_ui/) にこの値を
+        # 単純連結する。"tests/fonts/..." だと weko_records_uitests/fonts/...
+        # という存在しないパスになるので、製品の既定値と同じ形にする。
+        JPAEXG_TTF_FILEPATH="/fonts/ipaexg00201/ipaexg.ttf",
         # JPAEXM_TTF_FILEPATH=JPAEXM_TTF_FILEPATH,
-        JPAEXM_TTF_FILEPATH="tests/fonts/ipaexm.ttf",
+        JPAEXM_TTF_FILEPATH="/fonts/ipaexm00201/ipaexm.ttf",
         URL_OA_POLICY_HEIGHT=URL_OA_POLICY_HEIGHT,
         HEADER_HEIGHT=HEADER_HEIGHT,
         TITLE_HEIGHT=TITLE_HEIGHT,
@@ -530,6 +542,26 @@ def users(app, db):
 
     yield ret
     #return ret
+
+
+@pytest.fixture()
+def contributor_not_owner(app, db, users):
+    """A Contributor who neither created nor owns the ``records`` fixture.
+
+    The fixture records carry ``owner`` = 1 and ``_deposit.created_by`` = 2,
+    which are the ``user`` and ``contributor`` accounts. This one is a third
+    account with the same Contributor role, so it isolates the ownership
+    branch of check_created_id() from the role branch.
+    """
+    ds = app.extensions["invenio-accounts"].datastore
+    email = "contributor_not_owner@test.org"
+    account = User.query.filter_by(email=email).first()
+    if account is None:
+        account = create_test_user(email=email)
+    role = Role.query.filter_by(name="Contributor").first()
+    ds.add_role_to_user(account, role)
+    db.session.commit()
+    return account
 
 
 @pytest.fixture()
@@ -6424,11 +6456,16 @@ def users_storage_info(db, users):
 @pytest.fixture()
 def user_activity_log_partition_table(app, db):
     """Create user activity log partition."""
-    # Create partition for current month
-    now = datetime.now()
-    start = now.date().replace(day=1)
+    # Create partition for current month.
+    # weko_logging.models._create_current_month_partition が
+    # UserActivityLog.__table__ の after_create で当月分を
+    # user_activity_logs_%Y%m という名前で既に作っている。ここで別名を
+    # 付けると同じ範囲を指す2つ目のパーティションになり
+    # "would overlap partition" で弾かれるので、名前と基準時刻を本番に
+    # 合わせて IF NOT EXISTS を効かせる。
+    start = datetime.utcnow().date().replace(day=1)
     end = (start + timedelta(days=31)).replace(day=1)
-    partition_name = f"user_activity_logs_{now.year}_{now.month:02d}"
+    partition_name = f"user_activity_logs_{start:%Y%m}"
     create_partition_sql = f"""
         CREATE TABLE IF NOT EXISTS {partition_name}
         PARTITION OF user_activity_logs

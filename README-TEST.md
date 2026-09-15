@@ -1,5 +1,91 @@
 # Running tests locally
 
+## CI と同じ経路で回す（推奨）
+
+```shell
+scripts/ci/run-local.sh weko-records      # 1モジュール
+scripts/ci/run-local.sh --all             # マトリクス全部
+scripts/ci/run-local.sh --list            # 対象モジュール一覧
+```
+
+GitHub Actions の Unit Tests ジョブと**同じ部品**を呼びます。
+
+| | ローカル | CI |
+|---|---|---|
+| compose | `docker-compose2.yml:docker-compose.ci.yml` | 同左 |
+| 起動サービス | postgresql / elasticsearch / redis / rabbitmq のみ | 同左 |
+| 起動待ち | `scripts/ci/wait-for-services.sh` | 同左 |
+| テスト実行 | `scripts/ci/run-module-tests.sh`（= tox） | 同左 |
+| モジュール一覧 | `.github/workflows/unit-tests.yml` の matrix | 同左 |
+| イメージ | 同じ入力ファイルのハッシュでタグ付け、無ければビルド | 同じ入力で GHCR から pull |
+
+分岐しているのはイメージの入手方法だけです。CI と完全に同一のイメージで
+確かめたいときは `WEKO_IMAGE` / `WEKO_ES_IMAGE` で明示してください。
+
+### ローカルだけで回すと踏む罠
+
+**別の回し方をすると、テストは正常なのに落ちます。** 実測した2件:
+
+- **手元の無関係な `weko-web` イメージを流用した** → イメージに焼き付いた古い
+  egg-info の entry_point（`weko_theme.bundles:js_preview_widget`。現行の
+  `setup.py` には無い）を `invenio_assets` が読みにいって **191件が ImportError**。
+  CI は `ci-images.yml` が `modules/*/setup.py` を含むハッシュでタグを決めるので、
+  `setup.py` が変われば作り直され発生しません。
+  `run-local.sh` は起動直後に entry_point の健全性を確認して落とします。
+- **invenio の venv で直接 `pytest` を叩いた** → `pytest-mock` / `mock` が無く
+  `fixture 'mocker' not found`。CI は tox が `requirements2.txt` から入れます。
+
+また、別の WEKO スタックを動かしたままだとポート（29201 / 26301 / 24301）が
+衝突し、最悪そちらのサービスを掴みます。`run-local.sh` は起動前に検出します。
+
+### CI との唯一の差: Elasticsearch の bootstrap check
+
+`run-local.sh` は `scripts/ci/compose.local.yml` を重ねて、Elasticsearch を
+`discovery.type=single-node` で起動します。**AMD(x86_64)でも ARM でも同じ**で、
+アーキテクチャによる分岐はしません。
+
+ES 6.8 は非ループバックアドレスに bind した時点で bootstrap check（本番運用向けの
+検査）を強制しますが、これは**ホストのカーネルと sysctl に依存する**ため、
+開発機では環境しだいで落ちます。確認できたものだけでも:
+
+- **ARM**: seccomp の実装が x86_64 専用で、`seccomp unavailable:
+  CONFIG_SECCOMP not compiled into kernel` を投げて起動しない
+- **`vm.max_map_count` が 262144 未満のホスト**: `max_map_count` の検査で落ちる
+
+`discovery.type=single-node` にすると bootstrap check 自体が省かれます。ES は
+テストが使う単一ノードなので意味は変わりません（リポジトリの
+`docker-compose.arm64.yml` も同じ扱いです）。
+
+アーキで分岐しないのは、分岐すると「片方の CPU でしか再現しない失敗」を自分で
+作ることになり、ローカルと CI を揃えるという目的に反するためです。調整点は
+`install.sh` と同じく `COMPOSE_FILE` ひとつに寄せています。
+
+CI（GitHub Actions）はこのオーバレイを読みません。**最終的な合否は CI で確認して
+ください。**
+
+なお `Dockerfile.arm64` / `elasticsearch/Dockerfile.arm64` は使いません。
+nodesource の `setup_4.x` が消えており現在はビルドできないためで、
+標準の `Dockerfile` / `elasticsearch/Dockerfile` は aarch64 でもビルドできます。
+
+### モジュールを増やしたとき
+
+`.github/workflows/unit-tests.yml` の `matrix.module` が唯一の正です。
+`tests/` と `tox.ini` を持つのに未登録のモジュールがあると、CI の
+`matrix-check` ジョブが落とします（ジョブが立たない＝赤くもならない、という
+静かな漏れを防ぐため）。手元では次で確認できます。
+
+```shell
+scripts/ci/matrix.sh check
+```
+
+---
+
+## 以下は旧手順（CI とは別経路。参考）
+
+> Python 3.5 の venv を自前で組む手順です。**CI とは Python も依存も tox の
+> 有無も違う**ため、ここで通っても CI で通る保証はありません。結果を CI と
+> 突き合わせたいときは上の `run-local.sh` を使ってください。
+
 ## Running with venv
 
 ### Install python 3.5.x
@@ -24,7 +110,7 @@ python -m pip install -U setuptools wheel pip
 python -m pip install -r packages.txt
 python -m pip install -r packages-invenio.txt
 sed -E 's/\/code\///g' requirements-weko-modules.txt | xargs python -m pip install
-python -m pip install 'pytest>=4.6.4,<5.0.0' 'coverage>=4.5.3,<5.0.0' 'mock==3.0.5' 'moto==1.3.5' pytest-cov pytest-invenio responses
+python -m pip install 'pytest>=4.6.4,<5.0.0' 'coverage>=4.5.3,<5.0.0' 'mock==3.0.5' 'moto==1.3.7' 'pytest-mock==3.6.1' pytest-cov pytest-invenio 'responses==0.10.3'
 ```
 
 ### Run the tests
@@ -101,8 +187,26 @@ chmod g+w .
 Run the following command to install test packages inside your docker container.
 
 ```shell
-docker-compose exec web sh -c "pip install 'pytest>=4.6.4,<5.0.0' 'coverage>=4.5.3,<5.0.0' 'mock==3.0.5' 'moto==1.3.5' pytest-cov pytest-invenio 'responses<=0.10.15'"
+docker-compose exec web sh -c "pip install 'pytest>=4.6.4,<5.0.0' 'coverage>=4.5.3,<5.0.0' 'mock==3.0.5' 'moto==1.3.7' 'pytest-mock==3.6.1' pytest-cov pytest-invenio 'responses==0.10.3'"
 ```
+
+> **Do not use `moto==1.3.5`.** It requires `botocore<1.11` and pip silently
+> downgrades `boto3` to 1.7.84 to satisfy it. `invenio-s3` requires
+> `boto3>=1.9.83`, so the application then fails to start with
+> `pkg_resources.VersionConflict` and uwsgi logs `unable to load app 0`.
+> `moto==1.3.7` requires `botocore>=1.12.13`, which the pinned
+> `boto3==1.9.83` / `botocore==1.12.209` in `modules/*/requirements2.txt`
+> already satisfy.
+>
+> `pytest-mock` is needed too. Without it the tests that use the `mocker`
+> fixture (weko-items-ui and others) fail at setup with
+> `fixture 'mocker' not found`.
+>
+> If you hit this, restore the pinned versions:
+>
+> ```shell
+> docker-compose exec web pip install 'boto3==1.9.83' 'botocore==1.12.209'
+> ```
 
 ### Run the tests
 
@@ -137,3 +241,43 @@ INTERNALERROR> sqlite3.OperationalError: unable to open database file
 
 It means that you don't have write access inside the docker container.
 Follow the steps written at the beginning of this manual.
+
+## Reproducing the CI unit-test environment
+
+`.github/workflows/unit-tests.yml` does not use `install.sh`. Unit tests create
+their own `wekotest` database and use a temporary `instance_path`, so the demo
+SQL, `invenio assets build` / `invenio collect` and the nginx/pgpool/worker/
+inbox/mongo/flower containers are not needed.
+
+The image itself is built once per dependency change and reused: modules are
+installed with `-e` (see `requirements-weko-modules.txt`) and `.` is bind
+mounted to `/code`, so a source change never requires a rebuild.
+
+To run the same thing locally:
+
+```console
+$ export COMPOSE_FILE=docker-compose2.yml:docker-compose.ci.yml
+$ export WEKO_IMAGE=<prebuilt image>       # e.g. ghcr.io/rcosdp/weko-ci-web:<hash>
+$ export WEKO_ES_IMAGE=<prebuilt es image>
+$ docker compose up -d postgresql elasticsearch redis rabbitmq
+$ bash scripts/ci/wait-for-services.sh
+$ docker compose run --rm --no-deps -T web \
+    bash /code/scripts/ci/run-module-tests.sh weko-records
+$ docker compose down -v
+```
+
+Omit `WEKO_IMAGE` / `WEKO_ES_IMAGE` to build locally instead (the overlay then
+falls back to `weko-ci-web:local` / `weko-ci-es:local`, which you can build with
+`docker compose build web elasticsearch`).
+
+`ui-tests.yml` uses the same images (plus `WEKO_NGINX_IMAGE`) but still needs the
+full instance, so it runs `install.sh` with the build step skipped:
+
+```console
+$ export COMPOSE_FILE=docker-compose2.yml:docker-compose.ci.yml
+$ export WEKO_IMAGE=... WEKO_ES_IMAGE=... WEKO_NGINX_IMAGE=...
+$ WEKO_SKIP_BUILD=1 ./install.sh
+```
+
+The images themselves are prepared by `.github/workflows/ci-images.yml`; see the
+comment at the top of that file for how to replace them.

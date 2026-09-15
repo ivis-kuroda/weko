@@ -1,0 +1,345 @@
+# Claude によるPRレビュー(Anthropic API キーを使わない構成)
+#
+# 認証は **Claude サブスクリプションの長期トークン**。従量課金の API キーは使わない。
+#   ローカルで:  claude setup-token          # 1年有効・scope=user:inference
+#   登録:        gh secret set CLAUDE_CODE_AUTH_TOKEN --repo RCOSDP/weko
+#
+# 【役割】PR に既に付いているレビュー(CodeRabbit・人間)を読み、実コードで裏を取って
+#   裁定し、修正案まで出す。独自の指摘も併せて行う。
+#   ロジックは tools/claude-review/scripts/ に置く(api-inventory と同じ規約)。
+#   設計: docs/superpowers/specs/2026-09-01-claude-pr-review-integration-design.md
+#
+# 【このリポジトリは public】
+#   Secret 名は CLAUDE_CODE_AUTH_TOKEN、CLI が読む環境変数は CLAUDE_CODE_OAUTH_TOKEN。
+#   - Secret は fork からの PR には渡らない。下の if と Resolve PR で二重に弾く。
+#   - **レビュー結果を PR に投稿する(POST_TO_PR=true)。投稿内容は誰でも読める。**
+#     認可の欠落など機微な指摘が出る可能性があるため、運用で見ておくこと。
+#   - 他人が書いたレビュー本文を読ませるため、プロンプトインジェクションの面がある。
+#     build_input.py が外部データ枠で囲み、許可ツールは Read/Grep/Glob のみに絞る。
+
+name: Claude PR Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'レビュー対象の PR 番号'
+        required: true
+  pull_request:
+    branches: ['**']
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+env:
+  POST_TO_PR: 'true'
+  MODEL: 'sonnet'
+  # 同じ入力でも結果が揺れる。見逃しのほうが痛いので複数回まわして和集合を取る。
+  # 裁定は対象が列挙済みで揺れが小さいため、独自レビュー時代の 3 から 2 に下げた。
+  REVIEW_PASSES: '2'
+  MAX_DIFF_BYTES: '200000'     # これを超える差分はレビューしない(分割が必要)
+  MAX_REVIEW_BYTES: '100000'   # 既存レビューをこのバイト数まで詰め込む
+  # 移行のため既定は false。集約コメントの精度を数 PR 確認してから true にする。
+  POST_INLINE_SUGGESTIONS: 'false'
+
+# CodeRabbit は review を連投することがある(#1905 では 00:41 と 00:47)。
+# PR 単位で束ねないと同じ内容を二重に走らせる。
+# concurrency はジョブの if より先に(ワークフロー実行単位で)評価される。
+# 自分の集約コメント投稿が issue_comment を発火させ、同じグループに人間/CodeRabbit
+# 起因の実行がまだ動いていると cancel-in-progress で巻き添えキャンセルされてしまう。
+# sender で bot 起因の実行を別グループに隔離し、自分たち同士でしかキャンセルし合わない
+# ようにする。
+concurrency:
+  group: claude-review-${{ github.event.issue.number || github.event.pull_request.number || github.event.inputs.pr_number }}-${{ github.event.sender.login == 'github-actions[bot]' && 'bot' || 'user' }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 自分の投稿で再発火しないこと(inline suggestion も集約コメントも自分が書く)。
+    #
+    # pull_request_review / pull_request_review_comment には元々、発火元の
+    # 権限を問うガードが無かった。public リポジトリでは誰でも PR にレビュー
+    # ・レビューコメントを付けられるため、無関係な GitHub アカウントが
+    # レビューを 1 件出すだけで 30 分ジョブ・Claude 2 パスを起動できてしまう
+    # (個人サブスクリプションのトークンを消費する)。author_association が
+    # OWNER/MEMBER/COLLABORATOR のときだけ許可する。
+    #
+    # ただし CodeRabbit(coderabbitai[bot])のレビューはこのリポジトリの
+    # collaborator ではなく、実測(PR #1905 ほか)で author_association は
+    # "NONE" になる。このゲートをそのまま適用すると、この機能が裁定
+    # しようとしている当の CodeRabbit のレビューが起動要因から締め出される
+    # (「他レビューを踏まえて裁定する」という目的そのものを壊す)。
+    # そのため coderabbitai[bot] のログインを明示的に許可する。
+    # "[bot]" が付くログインは GitHub App のインストールに紐づく予約名で、
+    # 通常のユーザー名には角括弧を含められないため、一般ユーザーが
+    # このログインを詐称することはできない。
+    #
+    # issue_comment("@claude" コマンド)も同じ理由で投稿者を問う。
+    # ここだけガードが無いと、誰でも PR に "@claude" と書くだけで
+    # 30 分ジョブ・Claude 2 パスを起動できてしまう。こちらは
+    # CodeRabbit のような bot がコマンドを打つ想定が無いため、
+    # 例外を設けず OWNER/MEMBER/COLLABORATOR だけに絞る。
+    if: >-
+      github.event.sender.login != 'github-actions[bot]' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.repo.full_name == github.repository &&
+         github.event.pull_request.draft == false) ||
+        ((github.event_name == 'pull_request_review' ||
+          github.event_name == 'pull_request_review_comment') &&
+         github.event.pull_request.head.repo.full_name == github.repository &&
+         github.event.pull_request.draft == false &&
+         (
+           contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                    github.event.review.author_association || github.event.comment.author_association) ||
+           (github.event.review.user.login || github.event.comment.user.login) == 'coderabbitai[bot]'
+         )) ||
+        (github.event_name == 'issue_comment' &&
+         github.event.issue.pull_request != null &&
+         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                  github.event.comment.author_association) &&
+         startsWith(github.event.comment.body, '@claude'))
+      )
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # fork 判定を Secret より先に行う。issue_comment は fork PR でも base 側の
+      # 文脈で走り、Secret が使える状態でジョブが始まる。fork を弾く前に
+      # CLAUDE_CODE_AUTH_TOKEN を step の env に置くと「fork PR には Secret を
+      # 渡さない」という運用上の約束が実装と食い違うため、この順序は変えないこと。
+      #
+      # issue_comment の payload には head repo が無い。ここで API を引いて弾く。
+      - name: Resolve PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.inputs.pr_number || github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          info=$(gh api "repos/${{ github.repository }}/pulls/$N")
+          head_repo=$(echo "$info" | jq -r .head.repo.full_name)
+          # 差分は base...head の 3 点差分を出すので、読ませるコードも head に揃える。
+          # merge ref は base 側の変更も含み差分と一致しない上、mergeable は push のたび
+          # 非同期に null へリセットされ数秒かけて再計算される(このステップは
+          # synchronize 直後に走るため null を観測しやすい)。null を merge 側に倒すと、
+          # 新規 PR では refs/pull/N/merge がまだ無くジョブが落ち、既存 PR への push では
+          # 古い merge ref のまま新しい head の差分をレビューして裏取りが静かにずれる。
+          # head は常に存在し非同期計算にも依存しないため、常に head を使う。
+          if [ "$head_repo" != "${{ github.repository }}" ]; then
+            echo "::notice::fork からの PR ($head_repo) のためスキップします"
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "number=$N" >> "$GITHUB_OUTPUT"
+          # 以降のステップ(checkout・差分・inline 投稿)はすべてこの 1 つの SHA を
+          # 使う。refs/pull/N/head は動く参照で、実行中に push されると
+          # 「読んだ木」「差分」「inline の commit_id」が別リビジョンを指し得る。
+          echo "head_sha=$(echo "$info" | jq -r .head.sha)" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$(echo "$info" | jq -r .base.sha)" >> "$GITHUB_OUTPUT"
+          echo "PR #$N head=$(echo "$info" | jq -r .head.sha)"
+
+      - name: Check token
+        if: steps.pr.outputs.skip != 'true'
+        id: cfg
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_AUTH_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else echo "enabled=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::CLAUDE_CODE_AUTH_TOKEN が未設定のためスキップします"; fi
+
+      # issue_comment / pull_request_review では既定ブランチが出る。
+      # PR の中身を読ませるので必ず PR のリビジョンを明示する。refs/pull/N/head
+      # のような動く参照ではなく Resolve PR で確定した SHA を使う(実行中の
+      # push で木と差分がずれないようにするため)。fetch-depth: 0 は差分を
+      # ローカルで作るために必要(base 側の履歴も要る)。
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true'
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.pr.outputs.head_sha }}
+
+      - uses: actions/setup-python@v5
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true'
+        with:
+          python-version: '3.11'
+
+      # 壊れたスクリプトで本番レビューを走らせない。数秒で終わる。
+      - name: Test review scripts
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true'
+        run: |
+          pip install --quiet pytest
+          python3 -m pytest tools/claude-review/tests -q
+
+      - name: Install Claude Code
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true'
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Collect diff and existing reviews
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true'
+        id: collect
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.number }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          # 差分は Resolve PR で確定した base/head の 2 点から作る(gh pr diff と
+          # 同じ 3 点差分。index 行の短縮桁数だけが違う)。gh pr diff は実行時点の
+          # head を毎回引き直すため、実行中に push されると checkout した木と
+          # 差分が別リビジョンになる。取れなかったときだけ API に落とす。
+          if ! git diff --merge-base "$BASE_SHA" "$HEAD_SHA" > diff.patch; then
+            echo "::warning::ローカルで差分を作れませんでした。API から取得します"
+            gh pr diff "$PR" -R "${{ github.repository }}" > diff.patch
+          fi
+          size=$(stat -c%s diff.patch)
+          echo "差分: ${size} bytes"
+          if [ "$size" -gt "${MAX_DIFF_BYTES}" ]; then
+            echo "::warning::差分が大きすぎます(${size} > ${MAX_DIFF_BYTES})。スキップします"
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+
+          T=tools/claude-review/scripts
+          # GraphQL が落ちてもレビュー全体は落とさない。既存レビューなしとして続ける。
+          if ! python3 $T/collect_reviews.py \
+               --owner "${{ github.repository_owner }}" \
+               --repo "${{ github.event.repository.name }}" \
+               --pr "$PR" --out reviews.json; then
+            echo "::warning::既存レビューの取得に失敗しました。独自レビューのみ行います"
+            jq -n --arg sha "${{ steps.pr.outputs.head_sha }}" \
+              '{head_sha:$sha,threads:[],reviews:[],conversation:[],previous:null}' \
+              > reviews.json
+          fi
+
+          python3 $T/build_input.py --diff diff.patch --reviews reviews.json \
+            --max-bytes "${MAX_REVIEW_BYTES}" \
+            --out claude_input.txt --meta-out input_meta.json
+
+      - name: Review
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true' &&
+            steps.collect.outputs.skip != 'true'
+        id: review
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_AUTH_TOKEN }}
+        run: |
+          # Read/Grep/Glob だけを許可してリポジトリを読ませる。差分だけを見せると
+          # 文脈不足で誤検知が出る(初回試行で「%% は SyntaxError」という誤指摘が出た。
+          # 実際はその文字列が後で % 展開される前提だった)。
+          # 変更系のツールは許可せず、--permission-mode plan も併用する。
+          ok=0
+          for i in $(seq 1 "$REVIEW_PASSES"); do
+            echo "===== pass $i / $REVIEW_PASSES ====="
+            set +e
+            claude -p "$(cat tools/claude-review/prompt.md)" \
+               --output-format json --model "$MODEL" --permission-mode plan \
+               --allowed-tools "Read,Grep,Glob" \
+               < claude_input.txt > "raw_$i.json" 2> "claude_$i.err"
+            rc=$?
+            set -e
+            echo "claude exit=$rc"
+            if [ $rc -ne 0 ]; then
+              echo "::warning::pass $i が失敗しました(exit=$rc)"
+              head -c 1000 "claude_$i.err" || true
+            else
+              ok=$((ok + 1))
+              head -c 600 "raw_$i.json" || true
+            fi
+          done
+          if [ "$ok" -eq 0 ]; then
+            echo "::warning::すべての pass が失敗しました。診断のためジョブは継続します"
+            cat claude_*.err 2>/dev/null | head -c 3000 || true
+            exit 0
+          fi
+
+          T=tools/claude-review/scripts
+          python3 $T/aggregate.py --glob 'raw_*.json' --out findings.json
+          INLINE_FLAG=""
+          if [ "$POST_INLINE_SUGGESTIONS" = "true" ]; then INLINE_FLAG="--inline-enabled"; fi
+          python3 $T/render.py --findings findings.json --meta input_meta.json \
+            --model "$MODEL" --out review.md $INLINE_FLAG
+          cat review.md
+          echo "rendered=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload result
+        if: always() && steps.cfg.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-review
+          path: |
+            review.md
+            findings.json
+            reviews.json
+            input_meta.json
+            raw_*.json
+            claude_*.err
+          if-no-files-found: ignore
+
+      # Comment on PR より前に置く。集約コメントの投稿は自分の実行を止める最後の
+      # 一手になる(投稿直後に issue_comment が発火し、bot 用 concurrency グループの
+      # 実行中インスタンスがあれば cancel-in-progress で自分自身がキャンセルされ得る)。
+      # 残作業を先に済ませておけば、そのキャンセルが起きても失うものがない。
+      - name: Post inline suggestions
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true' &&
+            env.POST_TO_PR == 'true' && env.POST_INLINE_SUGGESTIONS == 'true' &&
+            steps.review.outputs.rendered == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/claude-review/scripts/post_inline.py \
+            --owner "${{ github.repository_owner }}" \
+            --repo "${{ github.event.repository.name }}" \
+            --pr "${{ steps.pr.outputs.number }}" \
+            --head-sha "${{ steps.pr.outputs.head_sha }}" \
+            --findings findings.json --diff diff.patch --reviews reviews.json
+
+      # レビューを生成できなかった(差分超過・全パス失敗・GraphQL 失敗等)ときは
+      # steps.review.outputs.rendered が空文字列のままで、このステップ自体が
+      # スキップされる。プレースホルダで前回の正常なコメントを上書きするより、
+      # 何もしないほうがましなので、既存コメントには一切触れない。
+      - name: Comment on PR
+        if: steps.cfg.outputs.enabled == 'true' && steps.pr.outputs.skip != 'true' &&
+            env.POST_TO_PR == 'true' && steps.review.outputs.rendered == 'true'
+        uses: actions/github-script@v7
+        env:
+          PR: ${{ steps.pr.outputs.number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const MARK = '<!-- claude-pr-review -->';
+            const n = Number(process.env.PR);
+            const body = MARK + '\n' + fs.readFileSync('review.md', 'utf8').slice(0, 60000)
+                 + '\n\n<sub>他レビューを踏まえた自動レビューです。'
+                 + '誤りが含まれることがあります。</sub>';
+            // 同じ PR で実行のたびコメントが増えないよう、既存の1件を更新する。
+            // listComments は 1 ページ 100 件までなので、コメントが 100 件を
+            // 超える PR では paginate しないと既存分を見つけられず、実行の
+            // たびに新しい集約コメントが増える。
+            // マーカーは HTML コメントで誰でも本文に書けるため、投稿者が
+            // この bot 自身であることも確かめる(他人のコメントを集約結果で
+            // 上書きしないため)。
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              issue_number: n, owner: context.repo.owner,
+              repo: context.repo.repo, per_page: 100,
+            });
+            const mine = comments.find(c => c.body && c.body.includes(MARK)
+              && c.user && c.user.login === 'github-actions[bot]');
+            if (mine) {
+              await github.rest.issues.updateComment({
+                comment_id: mine.id, owner: context.repo.owner,
+                repo: context.repo.repo, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: n, owner: context.repo.owner,
+                repo: context.repo.repo, body,
+              });
+            }
