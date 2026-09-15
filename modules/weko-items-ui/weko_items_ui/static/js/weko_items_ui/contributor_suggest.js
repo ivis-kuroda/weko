@@ -27,8 +27,7 @@ function updateSuggestState(inputId, candidates) {
  */
 function closeAllLists(elmnt) {
   var lists = document.getElementsByClassName("autocomplete-items");
-  for (var i = lists.length - 1; i >= 0; i--) {
-    var list = lists[i];
+  for (var list of Array.from(lists).reverse()) {
     var ownerInputId = list.id.slice(0, -("autocomplete-list".length));
     var clickedOwnerInput = elmnt && elmnt.id === ownerInputId;
     if (elmnt !== list && !clickedOwnerInput) {
@@ -242,8 +241,8 @@ function addActive(x, currentFocus) {
  * @param {HTMLCollection} x The autocomplete item elements to clear
  */
 function removeActive(x) {
-  for (var i = 0; i < x.length; i++) {
-    x[i].classList.remove("autocomplete-active");
+  for (var item of x) {
+    item.classList.remove("autocomplete-active");
   }
 }
 
