@@ -44,7 +44,7 @@ from flask import abort, current_app, flash, redirect, request, send_file, url_f
 from flask_babelex import gettext as _
 from flask_login import current_user
 from sqlalchemy import MetaData, Table
-from sqlalchemy.sql import text
+from sqlalchemy.sql import and_, text
 from jsonschema import SchemaError, ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -188,7 +188,7 @@ def _escape_like(value):
 
 
 def filter_shared_user_role(query, user_id_column):
-    """Restrict a query to users NOT holding an excluded role.
+    """Restrict a query to users allowed as a shared/contributor user.
 
     Args:
         query: A ``db.session.query(...)`` to extend.
@@ -196,21 +196,41 @@ def filter_shared_user_role(query, user_id_column):
             clause (``UserProfile.user_id`` or ``User.id``).
 
     Returns:
-        Query: The filtered query, excluding users who hold any role
-            listed in ``WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST``.
-            Users holding no role at all are included (not excluded).
+        Query: The filtered query, restricted to users who hold at
+            least one role listed in
+            ``WEKO_ITEMS_UI_SHARED_USER_ALLOWED_ROLE_NAME_LIST`` and hold
+            none of the roles listed in
+            ``WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST``. Users
+            holding no role at all are excluded. The currently logged-in user
+            is always excluded, regardless of role.
     """
+    allowed_role_names = current_app.config[
+        'WEKO_ITEMS_UI_SHARED_USER_ALLOWED_ROLE_NAME_LIST'
+    ]
     excluded_role_names = current_app.config[
         'WEKO_ITEMS_UI_SHARED_USER_EXCLUDED_ROLE_NAME_LIST'
     ]
-    excluded_role_ids = db.session.query(Role.id).filter(
-        Role.name.in_(excluded_role_names)
-    )
-    excluded_user_ids = db.session.query(userrole.c.user_id).filter(
-        userrole.c.role_id.in_(excluded_role_ids),
-        userrole.c.user_id.isnot(None),
-    )
-    return query.filter(~user_id_column.in_(excluded_user_ids))
+
+    def _role_holder_user_ids(role_names):
+        role_ids = db.session.query(Role.id).filter(
+            Role.name.in_(role_names)
+        )
+        return db.session.query(userrole.c.user_id).filter(
+            userrole.c.role_id.in_(role_ids),
+            userrole.c.user_id.isnot(None),
+        )
+
+    allowed_user_ids = _role_holder_user_ids(allowed_role_names)
+    excluded_user_ids = _role_holder_user_ids(excluded_role_names)
+    conditions = [
+        user_id_column.in_(allowed_user_ids),
+        ~user_id_column.in_(excluded_user_ids),
+    ]
+
+    if current_user.is_authenticated:
+        conditions.append(user_id_column != current_user.id)
+
+    return query.filter(and_(*conditions))
 
 
 def is_shared_user_role_allowed(user_id):
