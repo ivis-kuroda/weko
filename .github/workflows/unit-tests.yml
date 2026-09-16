@@ -1,148 +1,320 @@
-name: Unit Tests (Smart Image Build)
+# ユニットテスト。
+#
+# 【設計】本体イメージは「1回だけ」ビルドして GHCR に置き、47個のマトリクス
+# ジョブはそれを pull するだけにしている。
+#
+#   - イメージの用意は ci-images.yml (UIテストと共通) に委譲している。
+#     タグは依存関係ファイルのハッシュで、モジュールのソースは
+#     requirements-weko-modules.txt により -e (editable) インストールされ、
+#     docker-compose2.yml が . を /code に bind mount するため、ソース変更で
+#     イメージを作り直す必要がない。
+#     → 依存を触らない普通の PR ではビルドが 0 回になる。
+#     イメージを差し替えたいときの手順は ci-images.yml の先頭を参照。
+#
+#   - install.sh は CI では使わない。ユニットテストは conftest.py が自前で
+#     wekotest DB を作り、instance_path も tempfile.mkdtemp() を使うので、
+#     populate-instance / デモSQL / invenio assets build / invenio collect と
+#     nginx・pgpool・worker・inbox・mongo・flower の起動はいずれも不要。
+#     起動するのは PostgreSQL / Elasticsearch / Redis / RabbitMQ の4つだけ。
+#
+#   - tox が毎回 requirements2.txt (約290パッケージ) を入れ直す分は、
+#     bind mount 済みの .ci-cache/pip を pip のキャッシュにして共有する。
+#
+#   - 手元で同じことをするには scripts/ci/run-local.sh を使う。同じ compose
+#     オーバレイ・同じ待ち受けスクリプト・同じ run-module-tests.sh・同じマトリクスを
+#     読むので、ローカルと CI で結果が食い違わない。
+#     モジュール一覧はこのファイルの matrix が唯一の正 (scripts/ci/matrix.sh が読む)。
+#
+# fork からの PR は GHCR に push できない。その場合はビルドキャッシュ
+# (type=gha) だけ作り、各ジョブがそこからローカルビルドする。
 
-on: [push, pull_request]
+name: Unit Tests
 
-env:
-  IMAGE_TAG: ghcr.io/rcosdp/weko:${{ github.sha }}
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: CI イメージを作り直す(依存を変えずに差し替えたいとき)
+        type: boolean
+        default: false
 
 jobs:
-  test:
+  # マトリクスの列挙漏れを止める。数十行のリストは静かに古びる:
+  # v2.0.5 までに weko-notifications / weko-signposting / weko-workspace の3つが
+  # 漏れ、テスト一式(283本)を持ちながら一度も実行されていなかった。
+  # ジョブが立たない以上、赤くもならないので誰も気付けない。
+  matrix-check:
+    name: Matrix covers every testable module
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/matrix.sh check
+
+  images:
+    uses: ./.github/workflows/ci-images.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      force_rebuild: ${{ inputs.force_rebuild || false }}
+
+  test:
+    name: ${{ matrix.module }}${{ matrix.shard && format(' [{0}]', matrix.shard) || '' }}
+    needs: images
+    runs-on: ubuntu-latest
+    # 分割後の実測は1ジョブ 5〜47 分。ただし本数で等分しているだけなので
+    # 重いテストが1本に寄ると伸びる (weko-deposit [4/4] と
+    # weko-records-ui [4/4] が 90 分で cancelled になった)。上限は 120 分。
+    # 分割の考え方は下の matrix.include のコメントを参照。
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: read
+    env:
+      COMPOSE_FILE: docker-compose2.yml:docker-compose.ci.yml
+      WEKO_IMAGE: ${{ needs.images.outputs.web }}
+      WEKO_ES_IMAGE: ${{ needs.images.outputs.es }}
+      WEKO_NGINX_IMAGE: ${{ needs.images.outputs.nginx }}
     strategy:
       fail-fast: false
-      max-parallel: 4
+      # 分割でジョブ数が 47 → 73 に増えた。1ジョブあたり tox の依存導入
+      # (約290パッケージ) が乗るので、同時実行を上げないと全体の時間が延びる。
+      max-parallel: 8
       matrix:
-        module:
-          - invenio-accounts
-          - invenio-communities
-          - invenio-db
-          - invenio-deposit
-          - invenio-files-rest
-          - invenio-iiif
-          - invenio-indexer
-          - invenio-mail
-          - invenio-oaiharvester
-          - invenio-oaiserver
-          - invenio-oauth2server
-          - invenio-previewer
-          - invenio-queues
-          - invenio-records-rest
-          - invenio-records
-          - invenio-resourcesyncclient
-          - invenio-resourcesyncserver
-          - invenio-s3
-          - invenio-stats
-          - weko-accounts
-          - weko-admin
-          - weko-authors
-          - weko-bulkupdate
-          - weko-deposit
-          - weko-gridlayout
-          - weko-groups
-          - weko-handle
-          - weko-index-tree
-          - weko-indextree-journal
-          - weko-items-autofill
-          - weko-items-ui
-          - weko-itemtypes-ui
-          - weko-logging
-          - weko-plugins
-          - weko-records-ui
-          - weko-records
-          - weko-redis
-          - weko-schema-ui
-          - weko-search-ui
-          - weko-sitemap
-          - weko-swordserver
-          - weko-theme
-          - weko-user-profiles
-          - weko-workflow
-
+        # モジュール一覧はここが唯一の正 (scripts/ci/matrix.sh が読み、
+        # matrix-check ジョブが列挙漏れを止める)。
+        #
+        # shard を付けたものは pytest-split で本数を等分し、1ジョブ1本だけ回す。
+        # 付けていないモジュールは従来どおり全件を1ジョブで回す。
+        #
+        # 【なぜ分割するか】weko-workflow は 794 本で 4時間54分かかり、
+        # timeout を 60 → 120 分に上げても足りなかった。GitHub のジョブ上限は
+        # 6 時間なので、上限を上げ続ける形では解決しない。
+        # 効いているのは各モジュールの conftest.py の db フィクスチャで、
+        # 1テストごとに WEKO 全モジュール分のテーブルを drop_all()/create_all()
+        # している (1件あたり約22秒)。フィクスチャのスコープを見直せば
+        # 分割は不要になるが、テスト間の独立性が変わるので別途 (issues.md C-1)。
+        #
+        # 【分割数の決め方】1ジョブ 30 分前後に収まるまで割る。CI 実測:
+        #   weko-workflow  8分割 → 11〜15分   (ローカル通しでは 4時間54分)
+        #   weko-deposit   4分割 → 4〜29分、ただし[4/4]だけ 90分超で cancelled
+        #   weko-records-ui 4分割 → 44〜47分、[4/4]は 90分超で cancelled
+        #   weko-search-ui 4分割 → 11〜29分
+        # pytest-split は**本数**で等分するだけなので、重いテストが1本に寄ると
+        # このように偏る。偏った2つは分割数を倍にした。
+        # (根治は .test_durations を作って時間で割ること。issues.md C-1)
+        # test_views.py だけで 447 本あるためファイル単位では割れない。
+        include:
+          - module: invenio-accounts
+          - module: invenio-communities
+          - module: invenio-db
+          - module: invenio-deposit
+          - module: invenio-files-rest
+          - module: invenio-iiif
+          - module: invenio-indexer
+          - module: invenio-mail
+          - module: invenio-oaiharvester
+          - module: invenio-oaiserver
+          - module: invenio-oauth2server
+          - module: invenio-previewer
+          - module: invenio-queues
+          - module: invenio-records-rest
+          - module: invenio-records
+          - module: invenio-resourcesyncclient
+          - module: invenio-resourcesyncserver
+          - module: invenio-s3
+          - module: invenio-stats
+          - module: weko-accounts
+          - module: weko-admin
+          - module: weko-authors
+          - module: weko-bulkupdate
+          - module: weko-deposit
+            shard: 1/8
+          - module: weko-deposit
+            shard: 2/8
+          - module: weko-deposit
+            shard: 3/8
+          - module: weko-deposit
+            shard: 4/8
+          - module: weko-deposit
+            shard: 5/8
+          - module: weko-deposit
+            shard: 6/8
+          - module: weko-deposit
+            shard: 7/8
+          - module: weko-deposit
+            shard: 8/8
+          - module: weko-gridlayout
+          - module: weko-groups
+          - module: weko-handle
+          - module: weko-index-tree
+          - module: weko-indextree-journal
+          - module: weko-items-autofill
+          - module: weko-items-ui
+          - module: weko-itemtypes-ui
+          - module: weko-logging
+          - module: weko-notifications
+          - module: weko-plugins
+          - module: weko-records-ui
+            shard: 1/8
+          - module: weko-records-ui
+            shard: 2/8
+          - module: weko-records-ui
+            shard: 3/8
+          - module: weko-records-ui
+            shard: 4/8
+          - module: weko-records-ui
+            shard: 5/8
+          - module: weko-records-ui
+            shard: 6/8
+          - module: weko-records-ui
+            shard: 7/8
+          - module: weko-records-ui
+            shard: 8/8
+          - module: weko-records
+          - module: weko-redis
+          - module: weko-schema-ui
+          - module: weko-search-ui
+            shard: 1/6
+          - module: weko-search-ui
+            shard: 2/6
+          - module: weko-search-ui
+            shard: 3/6
+          - module: weko-search-ui
+            shard: 4/6
+          - module: weko-search-ui
+            shard: 5/6
+          - module: weko-search-ui
+            shard: 6/6
+          - module: weko-signposting
+          - module: weko-sitemap
+          - module: weko-swordserver
+          - module: weko-theme
+          - module: weko-user-profiles
+          - module: weko-workflow
+            shard: 1/8
+          - module: weko-workflow
+            shard: 2/8
+          - module: weko-workflow
+            shard: 3/8
+          - module: weko-workflow
+            shard: 4/8
+          - module: weko-workflow
+            shard: 5/8
+          - module: weko-workflow
+            shard: 6/8
+          - module: weko-workflow
+            shard: 7/8
+          - module: weko-workflow
+            shard: 8/8
+          - module: weko-workspace
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-
+    # テストはコンテナ内で動くので、ランナー側の Python は不要。
+    # フォントは描画系のテストが参照する。
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y docker-compose fonts-noto-cjk fonts-noto-color-emoji
+        sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
 
-    - name: Change owner
-      run: sudo chown -R 1000:1000 ./modules 
-        
+    - name: Log in to GHCR
+      continue-on-error: true
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Pull prebuilt images
+      id: pull
+      continue-on-error: true
+      run: |
+        docker pull -q "$WEKO_IMAGE"
+        docker pull -q "$WEKO_ES_IMAGE"
+
+    # fork PR など pull できない場合のみ、ビルドキャッシュからローカルビルドする。
     - name: Set up Docker Buildx
+      if: steps.pull.outcome == 'failure'
       uses: docker/setup-buildx-action@v3
 
-    - name: Cache Docker layers
-      uses: actions/cache@v3
+    - name: Build WEKO image (fallback)
+      if: steps.pull.outcome == 'failure'
+      uses: docker/build-push-action@v6
       with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
+        context: .
+        file: Dockerfile
+        tags: ${{ env.WEKO_IMAGE }}
+        load: true
+        cache-from: type=gha,scope=weko-web
+
+    - name: Build Elasticsearch image (fallback)
+      if: steps.pull.outcome == 'failure'
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: elasticsearch/Dockerfile
+        tags: ${{ env.WEKO_ES_IMAGE }}
+        load: true
+        cache-from: type=gha,scope=weko-es
+
+    # tox が張る venv への pip インストールを、ダウンロードなしで済ませる。
+    # .ci-cache は bind mount 経由でコンテナから /code/.ci-cache として見える。
+    - name: Restore pip cache
+      uses: actions/cache/restore@v4
+      with:
+        path: .ci-cache/pip
+        key: weko-pip-${{ hashFiles('modules/*/requirements2.txt') }}
         restore-keys: |
-          ${{ runner.os }}-buildx-
-    - name: Start WEKO containers
+          weko-pip-
+
+    - name: Prepare workspace permissions
+      # コンテナは uid 1000 (invenio) で動く。bind mount 先を書けるようにする。
       run: |
-        chmod +x install.sh
-        ./install.sh
-      env:
-        DOCKER_BUILDKIT: 1
-        COMPOSE_DOCKER_CLI_BUILD: 1
+        mkdir -p .ci-cache/pip
+        sudo chown -R 1000:1000 ./modules .ci-cache
+
+    # ユニットテストが使うのはこの4つだけ。
+    # nginx・pgpool・worker・inbox・mongo・flower は起動しない。
+    - name: Start test services
+      run: docker compose up -d --quiet-pull postgresql elasticsearch redis rabbitmq
 
     - name: Wait for services to be ready
-      run: |
-        echo "Waiting for WEKO services to start..."
-        start_time=$(date +%s)
-        max_attempts=60
-        attempt=0
-        while [ $attempt -lt $max_attempts ]; do
-          attempt=$((attempt + 1))
-          current_time=$(date +%s)
-          elapsed=$((current_time - start_time))
-          echo "Attempt $attempt/$max_attempts (${elapsed}s elapsed): Checking WEKO availability..."
-          # Check if we can connect to the service
-          if curl -f -s --insecure https://localhost/ > /dev/null 2>&1; then
-            echo "✓ WEKO is ready! (took ${elapsed}s)"
-            exit 0
-          else
-            # Get HTTP response code for debugging
-            http_code=$(curl -s -o /dev/null -w "%{http_code}" --insecure https://localhost/ 2>/dev/null || echo "connection_failed")
-            echo "  ✗ HTTP response: $http_code"
-          fi
-          if [ $attempt -lt $max_attempts ]; then
-            echo "  → Retrying in 5 seconds..."
-            sleep 5
-          fi
-        done
-        echo ""
-        echo "❌ WEKO failed to start within 300 seconds"
-        echo "Final HTTP response: $(curl -s -o /dev/null -w "%{http_code}" --insecure https://localhost/ 2>/dev/null || echo "connection_failed")"
-        echo ""
-        echo "Container status:"
-        docker compose -f docker-compose2.yml ps
-        exit 1
-
-    - name: Install test dependencies
-      run: |
-          docker compose -f docker-compose2.yml exec -T web bash -c "pip install --upgrade pip && pip install tox tox-setuptools-version pytest-timeout"
+      run: bash scripts/ci/wait-for-services.sh
 
     - name: Run tox in ${{ matrix.module }}
       run: |
-          docker compose -f docker-compose2.yml exec -T web bash -c "cd modules/${{ matrix.module }} && tox"
+        docker compose run --rm --no-deps -T \
+          web bash /code/scripts/ci/run-module-tests.sh \
+          '${{ matrix.module }}' '${{ matrix.shard }}'
 
     - name: Show logs if failed
       if: failure()
-      run: docker compose -f docker-compose2.yml logs
+      run: docker compose logs --tail=200
+
+    # pip の http キャッシュは 0600 で作られるため、uid 1000 のままだと
+    # ランナー(uid 1001)が tar で読めず保存に失敗する。所有権を戻す。
+    - name: Restore cache ownership
+      if: always()
+      run: |
+        [ -d .ci-cache ] || exit 0
+        sudo chown -R "$(id -u):$(id -g)" .ci-cache
+
+    # 47ジョブが同じキーで保存を試みるが、先着1つだけが保存され残りは
+    # 予約に失敗してスキップされる(警告のみ)。モジュール間で
+    # requirements2.txt はほぼ同一なので、1つ保存されれば全体に効く。
+    - name: Save pip cache
+      if: always()
+      continue-on-error: true
+      uses: actions/cache/save@v4
+      with:
+        path: .ci-cache/pip
+        key: weko-pip-${{ hashFiles('modules/*/requirements2.txt') }}
 
     - name: Stop containers
       if: always()
-      run: |
-        docker compose -f docker-compose2.yml down -v
-        docker system prune -f
-      
-      
+      run: docker compose down -v
