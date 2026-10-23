@@ -95,6 +95,28 @@ def test_check_import_file_format(app):
     assert e.value.message == "SimpleZip requires ro-crate-metadata.json or other metadata file."
     assert e.value.error_code == "1407"
 
+    # Truncated ZIP (no central directory)
+    file_content = BytesIO()
+    with ZipFile(file_content, 'w') as zip_file:
+        zip_file.writestr('data/ro-crate-metadata.json', '{}' * 100)
+    raw = file_content.getvalue()
+    for packaging in ('SimpleZip', 'SWORDBagIt'):
+        truncated = BytesIO(raw[:len(raw) // 2])
+        with pytest.raises(WekoSwordserverException) as e:
+            check_import_file_format(truncated, packaging)
+        assert e.value.errorType == ErrorType.ContentMalformed
+        assert e.value.message == "The file is not a valid ZIP archive. Please fix the file and resubmit."
+        assert e.value.error_code == "1412"
+
+    # CRC-corrupted ZIP with readable central directory (CRC is judged later as 1501)
+    file_content = BytesIO()
+    with ZipFile(file_content, 'w') as zip_file:
+        zip_file.writestr('data/ro-crate-metadata.json', 'abcdefgh')
+    raw = bytearray(file_content.getvalue())
+    pos = bytes(raw).find(b'abcdefgh')
+    raw[pos] ^= 0xFF
+    assert check_import_file_format(BytesIO(bytes(raw)), 'SimpleZip') == 'JSON'
+
     # Invalid packaging format
     file_content = BytesIO()
     with ZipFile(file_content, 'w') as zip_file:
