@@ -105,6 +105,10 @@ msgstr "Direct registration is not allowed for XML metadata yet."
 msgid "UNSUPPORTED_FILE_FORMAT"
 msgstr "Unsupported file format: {file_format}"
 
+#: weko_swordserver/errors.py:149
+msgid "ZIP_FILE_INVALID"
+msgstr "The file is not a valid ZIP archive. Please fix the file and resubmit."
+
 #: weko_swordserver/errors.py:154
 msgid "ITEM_CHECK_ERROR"
 msgstr "Item check error: {detail}"

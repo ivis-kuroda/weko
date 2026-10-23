@@ -146,6 +146,7 @@ class ContentFormatException(SwordClientException):
     METADATA_IMPORT_DISABLED = ErrorSpec("1409", _("METADATA_IMPORT_DISABLED"), ErrorType.MetadataFormatNotAcceptable)
     XML_DIRECT_REGISTRATION_NOT_ALLOWED = ErrorSpec("1410", _("XML_DIRECT_REGISTRATION_NOT_ALLOWED"), ErrorType.MetadataFormatNotAcceptable)
     UNSUPPORTED_FILE_FORMAT = ErrorSpec("1411", _("UNSUPPORTED_FILE_FORMAT"), ErrorType.MetadataFormatNotAcceptable)
+    ZIP_FILE_INVALID = ErrorSpec("1412", _("ZIP_FILE_INVALID"), ErrorType.ContentMalformed)
 
 
 class DataValidationException(SwordClientException):
