@@ -333,8 +333,11 @@ msgid ""
 msgstr "指定されたファイル{}の形式はインポートに対応していません。zip形式のファイルを指定してください。"
 
 #: weko_search_ui/utils.py:1013
-msgid "Failed to decode JSON-LD file: line {}, column {}. "
-msgstr "JSONファイルのデコードに失敗しました。行 {}, 列 {}. "
+msgid ""
+"Failed to decode JSON-LD file: line {}, column {}. Please fix the JSON "
+"syntax and resubmit."
+msgstr ""
+"JSONファイルのデコードに失敗しました。行 {}, 列 {}. JSONの構文を修正して再送信してください。"
 
 #: weko_search_ui/utils.py:1016
 msgid "Unexpected error occurred: "
