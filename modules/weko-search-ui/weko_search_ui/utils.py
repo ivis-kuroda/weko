@@ -2457,7 +2457,13 @@ def import_items_to_system(
                 remarks=tb_info[0],
                 request_info=request_info,
             )
-            error_id = "Unexpected error: {}".format(type(ex).__name__)
+            if (
+                ex.args and isinstance(ex.args[0], dict)
+                and ex.args[0].get("error_id")
+            ):
+                error_id = ex.args[0]["error_id"]
+            else:
+                error_id = "Unexpected error: {}".format(type(ex).__name__)
             return {"success": False, "error_id": error_id}
     return {"success": True, "recid": item["id"]}
 

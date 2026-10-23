@@ -51,7 +51,7 @@ from weko_search_ui.utils import (
     delete_items_with_activity
 )
 from weko_workflow.errors import WekoWorkflowException
-from weko_workflow.utils import get_site_info_name
+from weko_workflow.utils import check_an_item_is_locked, get_site_info_name
 from weko_workflow.scopes import activity_scope
 
 from .config import WEKO_SWORDSERVER_DEPOSIT_ROLE_ENABLE
@@ -695,6 +695,11 @@ def put_object(recid):
     }
     response = {}
     if register_type == "Direct":
+        # Check Record is in import progress
+        if check_an_item_is_locked(recid):
+            current_app.logger.error(f"Item is in import progress: {recid}.")
+            raise ConcurrencyException.ITEM_IMPORT_IN_PROGRESS()
+
         # Check cache if the item is being edited
         if not lock_item_will_be_edit(recid):
             msg = f"Item {recid} will be edited by another process."
@@ -710,6 +715,8 @@ def put_object(recid):
                 )
             )
             _raise_if_dependency_unavailable(import_result.get("error_id"))
+            if import_result.get("error_id") == "item_is_being_edit":
+                raise ConcurrencyException.ITEM_BEING_EDITED()
             if _is_unexpected_error(import_result.get("error_id")):
                 raise UnexpectedException.INTERNAL_SERVER_ERROR()
             raise InternalProcessException.UPDATE_FAILURE(recid=recid)

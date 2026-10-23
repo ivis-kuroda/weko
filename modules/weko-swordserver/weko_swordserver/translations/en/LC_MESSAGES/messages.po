@@ -161,11 +161,11 @@ msgstr "Item {recid} will be edited by another process."
 
 #: weko_swordserver/errors.py:181
 msgid "ITEM_IMPORT_IN_PROGRESS"
-msgstr "Item cannot be deleted because it is in import progress."
+msgstr "Item cannot be updated or deleted because it is in import progress."
 
 #: weko_swordserver/errors.py:182
 msgid "ITEM_BEING_EDITED"
-msgstr "Item cannot be deleted because it is being edited."
+msgstr "Item cannot be updated or deleted because it is being edited."
 
 #: weko_swordserver/errors.py:188
 msgid "RATE_LIMIT_EXCEEDED"
