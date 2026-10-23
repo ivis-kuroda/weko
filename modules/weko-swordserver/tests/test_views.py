@@ -2215,4 +2215,4 @@ def test_handle_dependency_unavailable(app,client,sessionlifetime,error_type,cod
     assert res.json["@type"] == "ServiceUnavailable"
     assert res.json["error"].startswith(f"WEKO_SWORDSERVER_E_{code}: {text}")
     assert mock_error.call_args[0][0].startswith(f"[{code}] GET /sword/test_error/{error_type}: ")
-    assert mock_error.call_args[1] == {"exc_info": True}
+    assert mock_error.call_args[1] == {}
