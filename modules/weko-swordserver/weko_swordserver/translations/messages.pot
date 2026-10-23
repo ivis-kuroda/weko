@@ -102,6 +102,10 @@ msgstr ""
 msgid "UNSUPPORTED_FILE_FORMAT"
 msgstr ""
 
+#: weko_swordserver/errors.py:149
+msgid "ZIP_FILE_INVALID"
+msgstr ""
+
 #: weko_swordserver/errors.py:154
 msgid "ITEM_CHECK_ERROR"
 msgstr ""

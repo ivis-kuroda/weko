@@ -9,7 +9,7 @@
 
 
 from hashlib import sha256
-from zipfile import ZipFile
+from zipfile import BadZipFile, ZipFile
 
 from flask import current_app
 from sqlalchemy.exc import InterfaceError, OperationalError
@@ -55,6 +55,7 @@ def check_import_file_format(file, packaging):
 
     Raises:
         WekoSwordserverException:
+            - If the import file cannot be opened as a ZIP archive
             - If packaging format is not SWORDBagIt or SimpleZip
             - If metadata file is not found in SWORDBagIt
             - If metadata file is not found in SimpleZip
@@ -66,8 +67,12 @@ def check_import_file_format(file, packaging):
     Returns:
         str: Import file format
     """
-    with ZipFile(file, "r") as zip_ref:
-        file_list =  zip_ref.namelist()
+    try:
+        with ZipFile(file, "r") as zip_ref:
+            file_list = zip_ref.namelist()
+    except BadZipFile as ex:
+        current_app.logger.error("Import file is not a valid ZIP file.")
+        raise ContentFormatException.ZIP_FILE_INVALID() from ex
     if "SWORDBagIt" in packaging:
         if SWORD_METADATA_FILE in file_list:
             file_format = "JSON"
@@ -152,14 +157,11 @@ def get_shared_ids_from_on_behalf_of(on_behalf_of):
             )
             shared_ids = [int(shib_user.weko_uid)]
     except NoResultFound as ex:
-        current_app.logger.error(
-            "No user found by On-Behalf-Of.", exc_info=True
-        )
+        current_app.logger.error("No user found by On-Behalf-Of.")
         raise AuthorizationException.ON_BEHALF_OF_USER_NOT_FOUND() from ex
     except (OperationalError, InterfaceError) as ex:
         current_app.logger.error(
-            "DB error occurred while searching user by On-Behalf-Of.",
-            exc_info=True
+            "DB error occurred while searching user by On-Behalf-Of."
         )
         raise InternalProcessException.DB_ACCESS_FAILURE() from ex
 
