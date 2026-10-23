@@ -1939,7 +1939,12 @@ def test_delete_item(app, client, db, tokens, sword_client, users,es_records, mo
         mock_logger.error.assert_not_called()
 
     # raise unexpected Exception: 3202 (501) and the failure is recorded in the user activity log
-    with patch("weko_swordserver.views.delete_items_with_activity") as mock_delete_with_activity:
+    # after the failed transaction is rolled back
+    calls = []
+    mock_logger.error.side_effect = lambda **kwargs: calls.append("log")
+    with patch("weko_swordserver.views.delete_items_with_activity") as mock_delete_with_activity, \
+            patch("weko_swordserver.views.db.session.rollback",
+                  side_effect=lambda: calls.append("rollback")) as mock_rollback:
         mock_delete_with_activity.side_effect = Exception("test error")
 
         res = client.delete(url, headers=headers)
@@ -1947,6 +1952,18 @@ def test_delete_item(app, client, db, tokens, sword_client, users,es_records, mo
         assert res.json["@type"] == "NotImplemented"
         assert res.json.get("error") == "WEKO_SWORDSERVER_E_3202: Unexpected error occurred during deletion."
         mock_logger.error.assert_called_once()
+        mock_rollback.assert_called_once()
+        assert calls == ["rollback", "log"]
+
+    # the rollback itself fails: only logged, still 3202 and recorded in the user activity log
+    mock_logger.error.reset_mock()
+    with patch("weko_swordserver.views.delete_items_with_activity", side_effect=Exception("test error")), \
+            patch("weko_swordserver.views.db.session.rollback", side_effect=Exception("rollback error")):
+        res = client.delete(url, headers=headers)
+        assert res.status_code == 501
+        assert res.json.get("error") == "WEKO_SWORDSERVER_E_3202: Unexpected error occurred during deletion."
+        mock_logger.error.assert_called_once()
+    mock_logger.error.side_effect = None
 
     # dependency failures are re-raised as 503 and are not recorded in the user activity log
     mock_logger.error.reset_mock()
