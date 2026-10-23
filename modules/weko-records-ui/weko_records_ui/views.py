@@ -1293,8 +1293,6 @@ def citation(record, pid, style=None, ln=None):
         return None
 
 
-@blueprint.route("/records/soft_delete/<recid>", methods=['POST'])
-@login_required
 @record_edit_permission_required(strip_prefix='del_ver_')
 def soft_delete(recid):
     """
@@ -1304,7 +1302,9 @@ def soft_delete(recid):
         recid (str): record id.
     Returns:
         object: response of delete result.
-            return json data
+    Raises:
+        Exception: any failure, after rollback and logging. A lock is an
+            Exception whose args[0] is a dict with ``is_locked``.
     """
     try:
         if not UserActivityLogger.issue_log_group_id(db.session):
@@ -1334,12 +1334,10 @@ def soft_delete(recid):
                             is_editing = True
                             break
             if is_editing:
-                response_data = {
-                    "code": -1,
+                raise Exception({
                     "is_locked": True,
                     "msg": _("MSG_WEKO_RECORDS_UI_IS_EDITING_TRUE")
-                }
-                return make_response(jsonify(response_data), 200)
+                })
             soft_delete_imp(recid)
             current_app.logger.info(f"Delete item: {recid}")
             starts_with_del_ver = False
@@ -1364,14 +1362,7 @@ def soft_delete(recid):
             target_key=recid,
             remarks=tb_info[0]
         )
-        if ex.args and len(ex.args) and isinstance(ex.args[0], dict) \
-                and ex.args[0].get('is_locked'):
-            return jsonify(
-                code=-1,
-                is_locked=True,
-                msg=str(ex.args[0].get('msg', ''))
-            )
-        abort(500)
+        raise
 
 
 @blueprint.route("/records/restore/<recid>", methods=['POST'])
