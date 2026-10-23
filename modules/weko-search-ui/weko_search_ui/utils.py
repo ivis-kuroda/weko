@@ -1021,7 +1021,10 @@ def check_jsonld_import_items(
         current_app.logger.warning("Failed to decode import JSON-LD file.")
         traceback.print_exc()
         check_result.update({
-            "error": _("Failed to decode JSON-LD file: line {}, column {}. ").format(ex.lineno, ex.colno)
+            "error": _(
+                "Failed to decode JSON-LD file: line {}, column {}. "
+                "Please fix the JSON syntax and resubmit."
+            ).format(ex.lineno, ex.colno)
         })
     except Exception:
         check_result.update({"error": _("Unexpected error occurred.")})
