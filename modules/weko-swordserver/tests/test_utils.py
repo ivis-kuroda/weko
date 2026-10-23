@@ -629,9 +629,9 @@ def test_check_deletion_type_invalid_type(app, mocker):
         ("recid_not_found", (MagicMock(), None), None, None,
          WekoSwordserverException, ErrorType.NotFound, "2102", "Record not found."),
         ("recid_locked", (MagicMock(), MagicMock()), True, None,
-         WekoSwordserverException, ErrorType.Conflict, "2202", "Item cannot be deleted because it is in import progress."),
+         WekoSwordserverException, ErrorType.Conflict, "2202", "Item cannot be updated or deleted because it is in import progress."),
         ("recid_editing", (MagicMock(), MagicMock()), False, True,
-         WekoSwordserverException, ErrorType.Conflict, "2203", "Item cannot be deleted because it is being edited."),
+         WekoSwordserverException, ErrorType.Conflict, "2203", "Item cannot be updated or deleted because it is being edited."),
     ],
     ids=[
         "valid_record",

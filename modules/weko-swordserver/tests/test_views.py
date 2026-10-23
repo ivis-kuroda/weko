@@ -658,6 +658,7 @@ def test_put_object(
     mocker.patch("weko_swordserver.views.import_items_to_system", return_value={"success": True, "recid": 1})
     mocker.patch("weko_items_ui.utils.send_mail_direct_registered")
     mocker.patch("weko_swordserver.views.lock_item_will_be_edit", return_value=True)
+    mocker.patch("weko_swordserver.views.check_an_item_is_locked", return_value=False)
     os.makedirs("/var/tmp/test", exist_ok=True)
 
     result = client.put(url, data={"file": storage}, content_type="multipart/form-data", headers=headers)
@@ -907,6 +908,20 @@ def test_put_object(
         assert result.json["@type"] == "Conflict"
         assert result.json.get("error") == "WEKO_SWORDSERVER_E_2201: Item 1 will be edited by another process."
 
+    # import in progress: 409 (2202), checked before the edit lock and the import
+    zip = make_zip()
+    storage = FileStorage(filename="payload.zip", stream=zip)
+    with patch("weko_swordserver.views.check_an_item_is_locked", return_value=True) as mock_locked, \
+            patch("weko_swordserver.views.lock_item_will_be_edit") as mock_lock, \
+            patch("weko_swordserver.views.import_items_to_system") as mock_import:
+        result = client.put(url, data={"file": storage}, content_type="multipart/form-data", headers=headers)
+        assert result.status_code == 409
+        assert result.json["@type"] == "Conflict"
+        assert result.json.get("error") == "WEKO_SWORDSERVER_E_2202: Item cannot be updated or deleted because it is in import progress."
+        mock_locked.assert_called_once_with("1")
+        mock_lock.assert_not_called()
+        mock_import.assert_not_called()
+
     # failed to import to system
     login_user_via_session(client=client, email=users[0]["email"])
     headers = {
@@ -956,6 +971,15 @@ def test_put_object(
         assert result.status_code == 503
         assert result.json["@type"] == "ServiceUnavailable"
         assert result.json["error"].startswith(f"WEKO_SWORDSERVER_E_{code}: ")
+
+    # item is being edited (fixed error_id from import_items_to_system): 409 (2203)
+    zip = make_zip()
+    storage = FileStorage(filename="payload.zip", stream=zip)
+    with patch("weko_swordserver.views.import_items_to_system", return_value={"success": False, "error_id": "item_is_being_edit"}):
+        result = client.put(url, data={"file": storage}, content_type="multipart/form-data", headers=headers)
+        assert result.status_code == 409
+        assert result.json["@type"] == "Conflict"
+        assert result.json.get("error") == "WEKO_SWORDSERVER_E_2203: Item cannot be updated or deleted because it is being edited."
 
     # failed to import to activity
     login_user_via_session(client=client, email=users[1]["email"])

@@ -1778,15 +1778,18 @@ def test_import_items_to_system(i18n_app, db, es_item_file_pipeline, es_records,
                 patch("weko_workflow.utils.UserActivityLogger.error") as mock_error_logger:
             assert import_items_to_system(item) == {"success": False, "error_id": "redis_unavailable"}
             mock_error_logger.assert_called()
-        # BaseException
-        with patch("weko_search_ui.utils.handle_check_item_is_locked", side_effect = Exception({"error_id": "is_duplicated_doi"})), \
-                patch("weko_workflow.utils.UserActivityLogger.error") as mock_error_logger:
-            assert import_items_to_system(item).get("success") == False
-            mock_error_logger.assert_called()
-        with patch("weko_search_ui.utils.handle_check_item_is_locked", side_effect = Exception()), \
-                patch("weko_workflow.utils.UserActivityLogger.error") as mock_error_logger:
-            assert import_items_to_system(item).get("success") == False
-            mock_error_logger.assert_called()
+        # BaseException: the error_id of an untyped Exception({"error_id": ...}) is passed through
+        for error_id in ["item_is_being_edit", "item_is_deleted", "is_duplicated_doi"]:
+            with patch("weko_search_ui.utils.handle_check_item_is_locked", side_effect = Exception({"error_id": error_id})), \
+                    patch("weko_workflow.utils.UserActivityLogger.error") as mock_error_logger:
+                assert import_items_to_system(item) == {"success": False, "error_id": error_id}
+                mock_error_logger.assert_called()
+        # other exceptions keep the unexpected-error marker
+        for exc in [Exception(), Exception("text"), Exception({"other": "value"})]:
+            with patch("weko_search_ui.utils.handle_check_item_is_locked", side_effect = exc), \
+                    patch("weko_workflow.utils.UserActivityLogger.error") as mock_error_logger:
+                assert import_items_to_system(item) == {"success": False, "error_id": "Unexpected error: Exception"}
+                mock_error_logger.assert_called()
 
     with patch("weko_search_ui.utils.register_item_metadata", return_value={}), \
             patch("weko_search_ui.utils.register_item_doi", return_value={}), \
