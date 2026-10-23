@@ -596,6 +596,19 @@ def test_check_deletion_type_no_sword_client(app, mocker):
     assert e.value.error_code == "2103"
 
 
+# .tox/c1/bin/pytest --cov=weko_swordserver tests/test_utils.py::test_check_deletion_type_inactive_sword_client -v -vv -s --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/weko-swordserver/.tox/c1/tmp --full-trace
+def test_check_deletion_type_inactive_sword_client(app, mocker):
+    mock_sword_client = MagicMock()
+    mock_sword_client.active = False
+    mock_sword_client.registration_type = "Direct"
+    mocker.patch("weko_swordserver.utils.SwordClient.get_client_by_id", return_value=mock_sword_client)
+    with pytest.raises(WekoSwordserverException) as e:
+        check_deletion_type("inactive")
+    assert e.value.errorType == ErrorType.BadRequest
+    assert e.value.message == "No SWORD API setting found for client ID that you are using."
+    assert e.value.error_code == "2103"
+
+
 # .tox/c1/bin/pytest --cov=weko_swordserver tests/test_utils.py::test_check_deletion_type_invalid_registration_type -v -vv -s --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/weko-swordserver/.tox/c1/tmp --full-trace
 def test_check_deletion_type_invalid_type(app, mocker):
     mock_sword_client = MagicMock()
