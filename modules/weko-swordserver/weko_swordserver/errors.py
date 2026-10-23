@@ -157,6 +157,8 @@ class DataValidationException(SwordClientException):
     MULTIPLE_ITEMS_IN_PUT = ErrorSpec("1504", _("MULTIPLE_ITEMS_IN_PUT"), ErrorType.ContentMalformed)
     ITEM_NOT_REGISTERED_FOR_PUT = ErrorSpec("1505", _("ITEM_NOT_REGISTERED_FOR_PUT"), ErrorType.BadRequest)
     ITEM_ID_MISMATCH = ErrorSpec("1506", _("ITEM_ID_MISMATCH"), ErrorType.BadRequest)
+    DOI_ALREADY_GRANTED = ErrorSpec("1507", _("DOI_ALREADY_GRANTED"), ErrorType.BadRequest)
+    DOI_WITHDRAWN = ErrorSpec("1508", _("DOI_WITHDRAWN"), ErrorType.BadRequest)
 
 
 class SwordConditionException(WekoSwordserverException):

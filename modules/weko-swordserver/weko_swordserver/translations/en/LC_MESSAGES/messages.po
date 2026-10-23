@@ -131,6 +131,14 @@ msgstr "This item is not registered yet: {item_title}"
 msgid "ITEM_ID_MISMATCH"
 msgstr "Item id does not match. item: {item_id}, request: {recid}"
 
+#: weko_swordserver/errors.py:160
+msgid "DOI_ALREADY_GRANTED"
+msgstr "This DOI has already been granted to another item. Please specify another DOI."
+
+#: weko_swordserver/errors.py:161
+msgid "DOI_WITHDRAWN"
+msgstr "This DOI was withdrawn. Please specify another DOI."
+
 #: weko_swordserver/errors.py:169
 msgid "ITEM_NOT_FOUND"
 msgstr "Item not found. (recid={recid})"
@@ -161,11 +169,11 @@ msgstr "Item {recid} will be edited by another process."
 
 #: weko_swordserver/errors.py:181
 msgid "ITEM_IMPORT_IN_PROGRESS"
-msgstr "Item cannot be deleted because it is in import progress."
+msgstr "Item cannot be updated or deleted because it is in import progress."
 
 #: weko_swordserver/errors.py:182
 msgid "ITEM_BEING_EDITED"
-msgstr "Item cannot be deleted because it is being edited."
+msgstr "Item cannot be updated or deleted because it is being edited."
 
 #: weko_swordserver/errors.py:188
 msgid "RATE_LIMIT_EXCEEDED"

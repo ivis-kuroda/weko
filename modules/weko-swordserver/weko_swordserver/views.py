@@ -51,7 +51,7 @@ from weko_search_ui.utils import (
     delete_items_with_activity
 )
 from weko_workflow.errors import WekoWorkflowException
-from weko_workflow.utils import get_site_info_name
+from weko_workflow.utils import check_an_item_is_locked, get_site_info_name
 from weko_workflow.scopes import activity_scope
 
 from .config import WEKO_SWORDSERVER_DEPOSIT_ROLE_ENABLE
@@ -385,6 +385,7 @@ def post_service_document():
                     f"Error in import_items_to_system: {import_result.get('error_id')}"
                 )
                 _raise_if_dependency_unavailable(import_result.get("error_id"))
+                _raise_if_doi_error(import_result.get("error_id"))
                 error = str(import_result.get('error_id'))
             else:
                 recid = str(import_result.get("recid"))
@@ -695,6 +696,11 @@ def put_object(recid):
     }
     response = {}
     if register_type == "Direct":
+        # Check Record is in import progress
+        if check_an_item_is_locked(recid):
+            current_app.logger.error(f"Item is in import progress: {recid}.")
+            raise ConcurrencyException.ITEM_IMPORT_IN_PROGRESS()
+
         # Check cache if the item is being edited
         if not lock_item_will_be_edit(recid):
             msg = f"Item {recid} will be edited by another process."
@@ -710,6 +716,9 @@ def put_object(recid):
                 )
             )
             _raise_if_dependency_unavailable(import_result.get("error_id"))
+            _raise_if_doi_error(import_result.get("error_id"))
+            if import_result.get("error_id") == "item_is_being_edit":
+                raise ConcurrencyException.ITEM_BEING_EDITED()
             if _is_unexpected_error(import_result.get("error_id")):
                 raise UnexpectedException.INTERNAL_SERVER_ERROR()
             raise InternalProcessException.UPDATE_FAILURE(recid=recid)
@@ -1199,6 +1208,13 @@ def _raise_if_dependency_unavailable(error_id):
     spec = UNAVAILABLE_ID.get(error_id)
     if spec:
         raise spec()
+
+def _raise_if_doi_error(error_id):
+    """Raise the 400 spec (1507/1508) if error_id is a DOI error id."""
+    if error_id == "is_duplicated_doi":
+        raise DataValidationException.DOI_ALREADY_GRANTED()
+    if error_id == "is_withdraw_doi":
+        raise DataValidationException.DOI_WITHDRAWN()
 
 def _is_unexpected_error(error):
     """Whether the error string is the "unexpected error" marker."""
