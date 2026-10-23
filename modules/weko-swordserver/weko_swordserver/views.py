@@ -1337,11 +1337,11 @@ def delete_object(recid):
         )
         raise
     except WekoWorkflowException as ex:
-        current_app.logger.error(f"Failed to delete item {recid}: {ex}", exc_info=True)
+        current_app.logger.error(f"Failed to delete item {recid}: {ex}")
         raise InternalProcessException.DELETE_FAILURE(recid=recid) from ex
     except Exception as ex:
         current_app.logger.error(
-            f"Unexpected error occurred during deletion: {ex}", exc_info=True
+            f"Unexpected error occurred during deletion: {ex}"
         )
         exec_info = sys.exc_info()
         tb_info = traceback.format_tb(exec_info[2])
@@ -1434,15 +1434,16 @@ def handle_weko_swordserver_exception(ex):
         current_app.logger.error(msg)
     else:
         current_app.logger.warning(msg)
+    traceback.print_exc()
     return jsonify(_create_error_document(
         ex.errorType.type, ex.message, ex.error_code
     )), ex.errorType.code
 
 def _dependency_error_response(err):
     current_app.logger.error(
-        f"[{err.error_code}] {request.method} {request.path}: {err.message}",
-        exc_info=True
+        f"[{err.error_code}] {request.method} {request.path}: {err.message}"
     )
+    traceback.print_exc()
     return jsonify(_create_error_document(
         err.errorType.type, err.message, err.error_code
     )), err.errorType.code

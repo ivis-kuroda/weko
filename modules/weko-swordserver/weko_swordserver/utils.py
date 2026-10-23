@@ -157,14 +157,11 @@ def get_shared_ids_from_on_behalf_of(on_behalf_of):
             )
             shared_ids = [int(shib_user.weko_uid)]
     except NoResultFound as ex:
-        current_app.logger.error(
-            "No user found by On-Behalf-Of.", exc_info=True
-        )
+        current_app.logger.error("No user found by On-Behalf-Of.")
         raise AuthorizationException.ON_BEHALF_OF_USER_NOT_FOUND() from ex
     except (OperationalError, InterfaceError) as ex:
         current_app.logger.error(
-            "DB error occurred while searching user by On-Behalf-Of.",
-            exc_info=True
+            "DB error occurred while searching user by On-Behalf-Of."
         )
         raise InternalProcessException.DB_ACCESS_FAILURE() from ex
 
