@@ -12,7 +12,12 @@ import responses
 
 import os
 import pytest
-from sqlalchemy.exc import SQLAlchemyError
+from elasticsearch.exceptions import ConnectionError as ESConnectionError
+from redis.exceptions import (
+    ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError,
+)
+from sqlalchemy.exc import InterfaceError, OperationalError, SQLAlchemyError
+from werkzeug.exceptions import Forbidden
 from flask import json, url_for, make_response
 from jinja2.exceptions import TemplateNotFound
 
@@ -22917,6 +22922,96 @@ def _call_prepare_delete(app, user, deposit, workflow=None, **kwargs):
     return res, mocks
 
 
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_views.py::test_prepare_delete_item_soft_delete_errors -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_prepare_delete_item_soft_delete_errors(app, db):
+    """直接削除パス: soft_delete の失敗を code=-1 で返す。依存先の障害は呼び出し元の指定で再送出する."""
+    _config_map(app)
+    u_o = _create_user(app, db, "pds_o@test.org")
+    deposit = _deposit(u_o.id, [], [])
+
+    def call(error, **kwargs):
+        with _delete_env(deposit) as mocks, \
+             app.test_request_context("/items/prepare_delete_item", method="POST"), \
+             patch("flask_login.utils._get_user",
+                   return_value=User.query.get(u_o.id)):
+            mocks.soft_delete.side_effect = error
+            res = prepare_delete_item(id="1", **kwargs)
+        mocks.send_mail.assert_not_called()
+        return res
+
+    # lock
+    res = call(Exception({"is_locked": True, "msg": "locked msg"}))
+    assert res.json == {"code": -1, "msg": "locked msg"}
+
+    # other error
+    res = call(Exception("Unexpected Error"))
+    assert res.json["code"] == -1
+    assert res.json["msg"] == "An error has occurred."
+
+    # dependency errors
+    for error in [
+        OperationalError("stmt", {}, Exception("db")),
+        InterfaceError("stmt", {}, Exception("db")),
+        RedisConnectionError("redis"),
+        RedisTimeoutError("redis"),
+        ESConnectionError("N/A", "es", Exception("es")),
+    ]:
+        res = call(error)
+        assert res.json["code"] == -1
+        assert res.json["msg"] == "An error has occurred."
+        res = call(error, raise_dependency_error=False)
+        assert res.json["code"] == -1
+        with pytest.raises(type(error)):
+            call(error, raise_dependency_error=True)
+
+    # HTTPException (e.g. permission error of soft_delete) is a plain error
+    for flag in (False, True):
+        res = call(Forbidden(), raise_dependency_error=flag)
+        assert res.json["code"] == -1
+        assert res.json["msg"] == "An error has occurred."
+
+
+# .tox/c1/bin/pytest --cov=weko_items_ui tests/test_views.py::test_prepare_delete_item_delete_workflow_errors -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
+def test_prepare_delete_item_delete_workflow_errors(app, db):
+    """削除ワークフロー作成パス: prepare_delete_workflow の失敗を code=-1 で返す。依存先の障害は呼び出し元の指定で再送出する."""
+    _config_map(app)
+    u_o = _create_user(app, db, "pdw_o@test.org")
+    deposit = _deposit(u_o.id, [], [])
+
+    def call(error, **kwargs):
+        with _delete_env(deposit, _delete_workflow()) as mocks, \
+             app.test_request_context("/items/prepare_delete_item", method="POST"), \
+             patch("flask_login.utils._get_user",
+                   return_value=User.query.get(u_o.id)):
+            mocks.prepare_workflow.side_effect = error
+            return prepare_delete_item(id="1", **kwargs)
+
+    # lock
+    res = call(Exception({"is_locked": True, "msg": "locked msg"}))
+    assert res.json == {"code": -1, "msg": "locked msg"}
+
+    # other error
+    res = call(Exception("Unexpected Error"))
+    assert res.json["code"] == -1
+    assert res.json["msg"] == "An error has occurred."
+
+    # dependency errors
+    for error in [
+        OperationalError("stmt", {}, Exception("db")),
+        InterfaceError("stmt", {}, Exception("db")),
+        RedisConnectionError("redis"),
+        RedisTimeoutError("redis"),
+        ESConnectionError("N/A", "es", Exception("es")),
+    ]:
+        res = call(error)
+        assert res.json["code"] == -1
+        assert res.json["msg"] == "An error has occurred."
+        res = call(error, raise_dependency_error=False)
+        assert res.json["code"] == -1
+        with pytest.raises(type(error)):
+            call(error, raise_dependency_error=True)
+
+
 # def prepare_edit_item(id=None, community=None):
 # .tox/c1/bin/pytest --cov=weko_items_ui tests/test_views.py::test_prepare_edit_item_permission -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-items-ui/.tox/c1/tmp
 def test_prepare_edit_item_permission(app, client_api, db):
@@ -23065,9 +23160,13 @@ def test_prepare_delete_item_shared_role_ids(app, client_api, db):
 
     # 1. 引数の並びと既定値
     params = inspect.signature(prepare_delete_item).parameters
-    assert list(params) == ["id", "community", "shared_user_ids", "shared_role_ids"]
+    assert list(params) == [
+        "id", "community", "shared_user_ids", "shared_role_ids",
+        "raise_dependency_error",
+    ]
     assert params["shared_user_ids"].default is None
     assert params["shared_role_ids"].default is None
+    assert params["raise_dependency_error"].default is False
 
     # 2. 複数化フラグ有効: get_shared_role_ids(deposit) で補完される（文字列配列）
     res, mocks = _post_prepare_delete(

@@ -14,7 +14,7 @@ from mock import patch
 from lxml import etree
 from weko_deposit.api import WekoRecord
 from werkzeug.datastructures import FileStorage
-from werkzeug.exceptions import NotFound, Forbidden
+from werkzeug.exceptions import NotFound, Forbidden, Unauthorized
 from jinja2.exceptions import TemplatesNotFound
 from weko_index_tree.models import IndexStyle
 from weko_workflow.models import (
@@ -1414,14 +1414,16 @@ def test_citation(app, records):
 
 
 # def soft_delete(recid):
+# soft_delete is not a route: it is called in-process by prepare_delete_item
+# and prepare_delete_workflow, so the tests call it inside a request context.
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_soft_delete_acl_guest -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
-def test_soft_delete_acl_guest(client, records):
+def test_soft_delete_acl_guest(app, records):
     # 51994 case.04(soft_delete)
-    url = url_for(
-        "weko_records_ui.soft_delete", recid=1, _external=True
-    )
-    res = client.post(url)
-    assert res.status_code == 302
+    from weko_records_ui.views import soft_delete
+
+    with app.test_request_context("/items/prepare_delete_item", method="POST"):
+        with pytest.raises(Unauthorized):
+            soft_delete("1")
 
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_soft_delete_acl -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
@@ -1438,20 +1440,23 @@ def test_soft_delete_acl_guest(client, records):
         (7, 200), # user
     ],
 )
-def test_soft_delete_acl(client, records, users, id, status_code, communities2):
+def test_soft_delete_acl(app, records, users, id, status_code, communities2):
+    from weko_records_ui.views import soft_delete
+
     with patch("flask_login.utils._get_user", return_value=users[id]["obj"]):
-        url = url_for(
-            "weko_records_ui.soft_delete", recid=1, _external=True
-        )
         # 51994 case.01, 05(soft_delete)
-        with patch("flask.templating._render", return_value=""):
+        with app.test_request_context("/items/prepare_delete_item", method="POST"):
             with patch("weko_records_ui.views.call_external_system") as mock_external, \
                  patch("weko_records_ui.permissions.has_comadmin_permission",return_value=True):
                 pid = PersistentIdentifier.query.filter_by(
                     pid_type='recid', pid_value='1').first()
                 assert pid.status == PIDStatus.REGISTERED
-                res = client.post(url)
-                assert res.status_code == status_code
+                if status_code == 200:
+                    res = soft_delete("1")
+                    assert res.status_code == 200
+                else:
+                    with pytest.raises(Forbidden):
+                        soft_delete("1")
                 pid = PersistentIdentifier.query.filter_by(
                     pid_type='recid', pid_value='1').first()
                 if status_code == 200:
@@ -1473,74 +1478,57 @@ def test_soft_delete_acl(client, records, users, id, status_code, communities2):
         (6, 200), # originalroleuser
     ],
 )
-def test_soft_delete_with_del_ver_prefix(client, records, users, id, status_code):
+def test_soft_delete_with_del_ver_prefix(app, records, users, id, status_code):
     """Test soft_delete when recid starts with 'del_ver_'."""
-    login_user_via_session(client=client, email=users[id]["email"])
+    from weko_records_ui.views import soft_delete
+
     # Arrange
     recid = "del_ver_1"
 
     # 51994 case.02(soft_delete)
-    with patch("weko_records_ui.views.delete_version") as mock_delete_version, \
+    with patch("flask_login.utils._get_user", return_value=users[id]["obj"]), \
+         app.test_request_context("/items/prepare_delete_item", method="POST"), \
+         patch("weko_records_ui.views.delete_version") as mock_delete_version, \
          patch("weko_records_ui.permissions.has_comadmin_permission",return_value=True):
         # Act
-        res = client.post(url_for("weko_records_ui.soft_delete", recid=recid, _external=True))
+        res = soft_delete(recid)
 
         # Assert
         assert res.status_code == status_code
         mock_delete_version.assert_called_once_with("1")
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_soft_delete_locked -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
-@pytest.mark.parametrize(
-    "id, status_code",
-    [
-        (1, 200), # repoadmin
-        (2, 200), # sysadmin
-        (3, 200), # comadmin
-        (6, 200), # originalroleuser
-    ],
-)
-def test_soft_delete_locked(client, records, users, id, status_code):
+@pytest.mark.parametrize("id", [1, 2, 3, 6])
+def test_soft_delete_locked(app, records, users, id):
     """Test soft_delete when item is locked."""
-    login_user_via_session(client=client, email=users[id]["email"])
+    from weko_records_ui.views import soft_delete
 
     # 51994 case.03(soft_delete)
-    with patch("weko_records_ui.views.is_workflow_activity_work", return_value=True), \
+    with patch("flask_login.utils._get_user", return_value=users[id]["obj"]), \
+         app.test_request_context("/items/prepare_delete_item", method="POST"), \
+         patch("weko_records_ui.views.is_workflow_activity_work", return_value=True), \
          patch("weko_records_ui.permissions.has_comadmin_permission",return_value=True):
-        res = client.post(url_for("weko_records_ui.soft_delete", recid=1, _external=True))
-        expected_response = {
-            "code": -1,
-            "is_locked": True,
-            "msg": _("MSG_WEKO_RECORDS_UI_IS_EDITING_TRUE")
-        }
-        assert res.status_code == status_code
-        assert json.loads(res.data) == expected_response
+        with pytest.raises(Exception) as excinfo:
+            soft_delete("1")
+        err = excinfo.value.args[0]
+        assert err["is_locked"] is True
+        assert "msg" in err
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_soft_delete_exception -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
-def test_soft_delete_exception(client, records, users):
-    """Test soft_delete when raise Exception."""
-    login_user_via_session(client=client, email=users[2]["email"])
-    expected_response = {
-            "code": -1,
-            "is_locked": True,
-            "msg": "Test Error."
-        }
-    with patch("weko_records_ui.views.has_update_version_role", return_value=True):
-        with patch("flask.templating._render", return_value=""):
-            pid = PersistentIdentifier.query.filter_by(pid_type='recid', pid_value='1').first()
-            assert pid.status == PIDStatus.REGISTERED
-            with patch("weko_records_ui.views.soft_delete_imp", side_effect=Exception([{
-                "is_locked": True,
-                "msg": "Test Error."
-            }])):
-                with pytest.raises(Exception):
-                    # 51994 case.06, 07(soft_delete)
-                    res = client.post(url_for("weko_records_ui.soft_delete", recid=1, _external=True))
+def test_soft_delete_exception(app, records, users):
+    """Test soft_delete re-raises the original exception."""
+    from weko_records_ui.views import soft_delete
 
-
-                    pid = PersistentIdentifier.query.filter_by(pid_type='recid', pid_value='1').first()
-                    assert pid.status == PIDStatus.REGISTERED
-                    assert res.status_code == 500
-                    assert res.json == expected_response
+    error = Exception([{"is_locked": True, "msg": "Test Error."}])
+    with patch("flask_login.utils._get_user", return_value=users[2]["obj"]), \
+         app.test_request_context("/items/prepare_delete_item", method="POST"):
+        pid = PersistentIdentifier.query.filter_by(pid_type='recid', pid_value='1').first()
+        assert pid.status == PIDStatus.REGISTERED
+        with patch("weko_records_ui.views.soft_delete_imp", side_effect=error):
+            # 51994 case.06, 07(soft_delete)
+            with pytest.raises(Exception) as excinfo:
+                soft_delete("1")
+            assert excinfo.value is error
 
 
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_soft_delete_called_in_process -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
@@ -2065,15 +2053,24 @@ def test_get_file_place_contributor_not_owner(
 # .tox/c1/bin/pytest --cov=weko_records_ui tests/test_views.py::test_record_edit_permission_contributor_not_owner -vv -s --cov-branch --cov-report=term --basetemp=/code/modules/weko-records-ui/.tox/c1/tmp
 @pytest.mark.parametrize("endpoint", ["soft_delete", "restore"])
 def test_record_edit_permission_contributor_not_owner(
-        client, records, users, contributor_not_owner, endpoint):
+        app, client, records, users, contributor_not_owner, endpoint):
     """Holding the Contributor role is not enough without ownership.
 
     users[0] (contributor) passes because _deposit.created_by is its id, and
     users[7] (user) passes because the record's top-level owner is its id --
     not because of their role. A third Contributor who is neither must be
     rejected, otherwise the ownership check is not doing anything.
+
+    soft_delete is not a route, so it is called in-process.
     """
     with patch("flask_login.utils._get_user", return_value=contributor_not_owner):
+        if endpoint == "soft_delete":
+            from weko_records_ui.views import soft_delete
+            with app.test_request_context(
+                    "/items/prepare_delete_item", method="POST"):
+                with pytest.raises(Forbidden):
+                    soft_delete("1")
+            return
         url = url_for("weko_records_ui." + endpoint, recid=1, _external=True)
         with patch("flask.templating._render", return_value=""):
             res = client.post(url)

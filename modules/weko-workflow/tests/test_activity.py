@@ -1900,7 +1900,7 @@ class TestHeadlessActivity:
         set_proxy_posting(app, True)
         mock_prepare, post_activity = delete()
         args, kwargs = mock_prepare.call_args
-        assert len(args) == 3 and kwargs == {}
+        assert len(args) == 3 and kwargs == {'raise_dependency_error': True}
         assert args[0] == "200001"
         assert post_activity["shared_role_ids"] == [rid(env.R_A)]
         # 3. 個人側は明示指定された shared_ids(未指定は空)が優先され、補完されない
