@@ -126,6 +126,14 @@ msgstr ""
 msgid "ITEM_ID_MISMATCH"
 msgstr ""
 
+#: weko_swordserver/errors.py:160
+msgid "DOI_ALREADY_GRANTED"
+msgstr ""
+
+#: weko_swordserver/errors.py:161
+msgid "DOI_WITHDRAWN"
+msgstr ""
+
 #: weko_swordserver/errors.py:169
 msgid "ITEM_NOT_FOUND"
 msgstr ""

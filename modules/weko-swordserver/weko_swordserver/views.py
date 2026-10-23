@@ -385,6 +385,7 @@ def post_service_document():
                     f"Error in import_items_to_system: {import_result.get('error_id')}"
                 )
                 _raise_if_dependency_unavailable(import_result.get("error_id"))
+                _raise_if_doi_error(import_result.get("error_id"))
                 error = str(import_result.get('error_id'))
             else:
                 recid = str(import_result.get("recid"))
@@ -715,6 +716,7 @@ def put_object(recid):
                 )
             )
             _raise_if_dependency_unavailable(import_result.get("error_id"))
+            _raise_if_doi_error(import_result.get("error_id"))
             if import_result.get("error_id") == "item_is_being_edit":
                 raise ConcurrencyException.ITEM_BEING_EDITED()
             if _is_unexpected_error(import_result.get("error_id")):
@@ -1206,6 +1208,13 @@ def _raise_if_dependency_unavailable(error_id):
     spec = UNAVAILABLE_ID.get(error_id)
     if spec:
         raise spec()
+
+def _raise_if_doi_error(error_id):
+    """Raise the 400 spec (1507/1508) if error_id is a DOI error id."""
+    if error_id == "is_duplicated_doi":
+        raise DataValidationException.DOI_ALREADY_GRANTED()
+    if error_id == "is_withdraw_doi":
+        raise DataValidationException.DOI_WITHDRAWN()
 
 def _is_unexpected_error(error):
     """Whether the error string is the "unexpected error" marker."""

@@ -131,6 +131,14 @@ msgstr "This item is not registered yet: {item_title}"
 msgid "ITEM_ID_MISMATCH"
 msgstr "Item id does not match. item: {item_id}, request: {recid}"
 
+#: weko_swordserver/errors.py:160
+msgid "DOI_ALREADY_GRANTED"
+msgstr "This DOI has already been granted to another item. Please specify another DOI."
+
+#: weko_swordserver/errors.py:161
+msgid "DOI_WITHDRAWN"
+msgstr "This DOI was withdrawn. Please specify another DOI."
+
 #: weko_swordserver/errors.py:169
 msgid "ITEM_NOT_FOUND"
 msgstr "Item not found. (recid={recid})"
