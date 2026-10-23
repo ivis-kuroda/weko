@@ -16,7 +16,7 @@ from invenio_files_rest.models import Location
 from weko_workflow.errors import WekoWorkflowException
 
 from weko_swordserver.errors import *
-from weko_swordserver.views import _get_status_workflow_document, blueprint, _get_status_document, _create_error_document, handle_weko_swordserver_exception, _raise_if_dependency_unavailable, _is_unexpected_error
+from weko_swordserver.views import _get_status_workflow_document, blueprint, _get_status_document, _create_error_document, handle_weko_swordserver_exception, _raise_if_dependency_unavailable, _raise_if_doi_error, _is_unexpected_error
 
 from .helpers import calculate_hash
 
@@ -457,6 +457,17 @@ def test_post_service_document_dependency_errors(app, client, db, users, make_zi
         assert result.status_code == 503
         assert result.json["@type"] == "ServiceUnavailable"
         assert result.json["error"].startswith(f"WEKO_SWORDSERVER_E_{code}: ")
+
+    # DOI error_id: 400 (1507/1508), not folded into 3104
+    for error_id, code, msg in [
+        ("is_duplicated_doi", "1507", "This DOI has already been granted to another item. Please specify another DOI."),
+        ("is_withdraw_doi", "1508", "This DOI was withdrawn. Please specify another DOI."),
+    ]:
+        with patch("weko_swordserver.views.import_items_to_system", return_value={"success": False, "error_id": error_id}):
+            result = post()
+        assert result.status_code == 400
+        assert result.json["@type"] == "BadRequest"
+        assert result.json["error"] == f"WEKO_SWORDSERVER_E_{code}: {msg}"
 
     # dependency exception raised inside process_item is re-raised, not folded into the "Unexpected error" marker (3201)
     for exc, code in [
@@ -980,6 +991,19 @@ def test_put_object(
         assert result.status_code == 409
         assert result.json["@type"] == "Conflict"
         assert result.json.get("error") == "WEKO_SWORDSERVER_E_2203: Item cannot be updated or deleted because it is being edited."
+
+    # DOI error_id: 400 (1507/1508), not folded into 3105
+    for error_id, code, msg in [
+        ("is_duplicated_doi", "1507", "This DOI has already been granted to another item. Please specify another DOI."),
+        ("is_withdraw_doi", "1508", "This DOI was withdrawn. Please specify another DOI."),
+    ]:
+        zip = make_zip()
+        storage = FileStorage(filename="payload.zip", stream=zip)
+        with patch("weko_swordserver.views.import_items_to_system", return_value={"success": False, "error_id": error_id}):
+            result = client.put(url, data={"file": storage}, content_type="multipart/form-data", headers=headers)
+        assert result.status_code == 400
+        assert result.json["@type"] == "BadRequest"
+        assert result.json.get("error") == f"WEKO_SWORDSERVER_E_{code}: {msg}"
 
     # failed to import to activity
     login_user_via_session(client=client, email=users[1]["email"])
@@ -1851,6 +1875,21 @@ def test__raise_if_dependency_unavailable(app):
     # None and other values do nothing
     assert _raise_if_dependency_unavailable(None) is None
     assert _raise_if_dependency_unavailable("sqlalchemy error: x") is None
+
+
+# def _raise_if_doi_error(error_id):
+# .tox/c1/bin/pytest --cov=weko_swordserver tests/test_views.py::test__raise_if_doi_error -v -vv -s --cov-branch --cov-report=term --cov-report=html --basetemp=/code/modules/weko-swordserver/.tox/c1/tmp --full-trace
+def test__raise_if_doi_error(app):
+    # the DOI error_id values raise the matching 400 error
+    for error_id, code in [("is_duplicated_doi", "1507"), ("is_withdraw_doi", "1508")]:
+        with app.test_request_context("/test_req"):
+            with pytest.raises(WekoSwordserverException) as e:
+                _raise_if_doi_error(error_id)
+        assert e.value.error_code == code
+        assert e.value.errorType == ErrorType.BadRequest
+    # None and other values do nothing
+    assert _raise_if_doi_error(None) is None
+    assert _raise_if_doi_error("item_is_deleted") is None
 
 
 # def _is_unexpected_error(error):
