@@ -37,11 +37,17 @@ from flask import (
     Blueprint, abort, current_app, flash, jsonify, redirect,
     render_template, request, session, url_for, Response
 )
+from elasticsearch.exceptions import ConnectionError as ESConnectionError
 from flask_babelex import gettext as _
 from flask_login import login_required
 from flask_security import current_user
 from flask_wtf import FlaskForm
-from sqlalchemy.exc import SQLAlchemyError, StatementError
+from redis.exceptions import (
+    ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError,
+)
+from sqlalchemy.exc import (
+    InterfaceError, OperationalError, SQLAlchemyError, StatementError
+)
 from werkzeug.utils import import_string
 from webassets.exceptions import BuildError
 from werkzeug.exceptions import BadRequest
@@ -1265,7 +1271,7 @@ def prepare_edit_item(id=None, community=None):
 @blueprint.route('/prepare_delete_item', methods=['POST'])
 @login_required
 def prepare_delete_item(id=None, community=None, shared_user_ids=None,
-                        shared_role_ids=None):
+                        shared_role_ids=None, raise_dependency_error=False):
     """Prepare delete item.
 
     Delete item directly or create delete activity.
@@ -1282,6 +1288,8 @@ def prepare_delete_item(id=None, community=None, shared_user_ids=None,
         community (str): community id
         shared_user_ids (list): shared user ids
         shared_role_ids (list): shared role ids (proxy posting groups)
+        raise_dependency_error (bool): if True, re-raise DB / Redis /
+            search engine errors instead of returning ``code=-1``.
 
     Returns:
         Response: JSON response with code and message.
@@ -1398,7 +1406,20 @@ def prepare_delete_item(id=None, community=None, shared_user_ids=None,
 
         if not workflow or workflow.delete_flow_id is None:
             from weko_records_ui.views import soft_delete
-            soft_delete(del_value)
+            try:
+                soft_delete(del_value)
+            except (OperationalError, InterfaceError, RedisConnectionError,
+                    RedisTimeoutError, ESConnectionError):
+                if raise_dependency_error:
+                    raise
+                return jsonify(code=err_code, msg=_('An error has occurred.'))
+            except Exception as ex:
+                if ex.args and isinstance(ex.args[0], dict) \
+                        and ex.args[0].get('is_locked'):
+                    msg = ex.args[0].get('msg', '')
+                else:
+                    msg = _('An error has occurred.')
+                return jsonify(code=err_code, msg=msg)
             send_mail_item_deleted(pid_value, deposit, user_id, shared_user_ids)
             return jsonify(
                 code=0,
@@ -1422,6 +1443,18 @@ def prepare_delete_item(id=None, community=None, shared_user_ids=None,
         try:
             rtn = prepare_delete_workflow(post_activity, recid, deposit)
             db.session.commit()
+        except (OperationalError, InterfaceError, RedisConnectionError,
+                RedisTimeoutError, ESConnectionError):
+            # Before SQLAlchemyError: OperationalError is its subclass.
+            current_app.logger.error('dependency error')
+            traceback.print_exc()
+            db.session.rollback()
+            if raise_dependency_error:
+                raise
+            return jsonify(
+                code=err_code,
+                msg=_('An error has occurred.')
+            )
         except SQLAlchemyError as ex:
             current_app.logger.error('sqlalchemy error: {}'.format(ex))
             traceback.print_exc()
@@ -1431,13 +1464,15 @@ def prepare_delete_item(id=None, community=None, shared_user_ids=None,
                 msg=_('An error has occurred.')
             )
         except Exception as ex:
-            current_app.logger.error('Unexpected error: {}'.format(ex))
-            traceback.print_exc()
+            if ex.args and isinstance(ex.args[0], dict) \
+                    and ex.args[0].get('is_locked'):
+                msg = ex.args[0].get('msg', '')
+            else:
+                current_app.logger.error('Unexpected error: {}'.format(ex))
+                traceback.print_exc()
+                msg = _('An error has occurred.')
             db.session.rollback()
-            return jsonify(
-                code=err_code,
-                msg=_('An error has occurred.')
-            )
+            return jsonify(code=err_code, msg=msg)
 
         if community:
             comm = GetCommunity.get_community_by_id(community)

@@ -244,7 +244,9 @@ class HeadlessActivity(WorkActivity):
             if not for_delete:
                 response = prepare_edit_item(item_id, community)
             else:
-                response = prepare_delete_item(item_id, community, shared_ids)
+                response = prepare_delete_item(
+                    item_id, community, shared_ids, raise_dependency_error=True
+                )
 
             if response.json.get("code") != 0:
                 current_app.logger.error(
