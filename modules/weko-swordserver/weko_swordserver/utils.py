@@ -413,12 +413,12 @@ def check_deletion_type(client_id):
 
     Raises:
         WekoSwordserverException:
-            - If no SWORD API setting found for client ID.
+            - If no SWORD API setting found for client ID, or it is inactive.
             - If workflow not found for registration item.
             - If invalid registration type.
     """
     sword_client = SwordClient.get_client_by_id(client_id)
-    if sword_client is None:
+    if sword_client is None or not sword_client.active:
         current_app.logger.error(
             f"No SWORD API setting foound for client ID: {client_id}"
         )
