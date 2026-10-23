@@ -1329,6 +1329,11 @@ def delete_object(recid):
         )
         exec_info = sys.exc_info()
         tb_info = traceback.format_tb(exec_info[2])
+        try:
+            db.session.rollback()
+        except Exception:
+            current_app.logger.error(f"Failed to rollback during deletion of {recid}")
+            traceback.print_exc()
         UserActivityLogger.error(
             operation="ITEM_DELETE",
             target_key=recid,
