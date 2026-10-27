@@ -696,16 +696,16 @@ def put_object(recid):
     }
     response = {}
     if register_type == "Direct":
-        # Check Record is in import progress
-        if check_an_item_is_locked(recid):
-            current_app.logger.error(f"Item is in import progress: {recid}.")
-            raise ConcurrencyException.ITEM_IMPORT_IN_PROGRESS()
-
         # Check cache if the item is being edited
         if not lock_item_will_be_edit(recid):
             msg = f"Item {recid} will be edited by another process."
             current_app.logger.error(msg)
             raise ConcurrencyException.ITEM_LOCKED(recid=recid)
+
+        # Check Record is in import progress
+        if check_an_item_is_locked(recid):
+            current_app.logger.error(f"Item is in import progress: {recid}.")
+            raise ConcurrencyException.ITEM_IMPORT_IN_PROGRESS()
 
         import_result = import_items_to_system(item, request_info=request_info)
         if not import_result.get("success"):
