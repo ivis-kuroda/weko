@@ -919,18 +919,18 @@ def test_put_object(
         assert result.json["@type"] == "Conflict"
         assert result.json.get("error") == "WEKO_SWORDSERVER_E_2201: Item 1 will be edited by another process."
 
-    # import in progress: 409 (2202), checked before the edit lock and the import
+    # import in progress: 409 (2202), checked after the edit lock and before the import
     zip = make_zip()
     storage = FileStorage(filename="payload.zip", stream=zip)
     with patch("weko_swordserver.views.check_an_item_is_locked", return_value=True) as mock_locked, \
-            patch("weko_swordserver.views.lock_item_will_be_edit") as mock_lock, \
+            patch("weko_swordserver.views.lock_item_will_be_edit", return_value=True) as mock_lock, \
             patch("weko_swordserver.views.import_items_to_system") as mock_import:
         result = client.put(url, data={"file": storage}, content_type="multipart/form-data", headers=headers)
         assert result.status_code == 409
         assert result.json["@type"] == "Conflict"
         assert result.json.get("error") == "WEKO_SWORDSERVER_E_2202: Item cannot be updated or deleted because it is in import progress."
+        mock_lock.assert_called_once_with("1")
         mock_locked.assert_called_once_with("1")
-        mock_lock.assert_not_called()
         mock_import.assert_not_called()
 
     # failed to import to system
